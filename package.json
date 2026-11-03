@@ -1,0 +1,26 @@
+{
+  "name": "lectures-im-69",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+ "scripts": {
+    "html": "marp --html",
+    "pdf": "marp --pdf --allow-local-files"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.16.1",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.16.1",
+  "type": "module",
+  "dependencies": {
+    "@marp-team/marp-cli": "^4.5.1",
+    "@marp-team/marpit": "^3.2.3"
+  }
+}

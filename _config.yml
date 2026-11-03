@@ -1,0 +1,5 @@
+remote_theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-remote-theme # add this line to the plugins list if you already have one
+title: [AI-IM Class 2569]
+description: [Practical Artificial Intelligence for Smart Industries 2569]
