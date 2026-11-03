@@ -122,13 +122,13 @@ approximately linear relationship between $x$ and $y$, corrupted by noise.
 For example:
 
 \begin{center}
-\begin{tabular}{ccccc}
-\toprule
-$x$ & 1 & 2 & 3 & 4 \\
-\midrule
-$y$ & 1 & 3 & 3 & 5 \\
-\bottomrule
-\end{tabular}
+  \begin{tabular}{ccccc}
+    \toprule
+    $x$ & 1 & 2 & 3 & 4 \\
+    \midrule
+    $y$ & 1 & 3 & 3 & 5 \\
+    \bottomrule
+  \end{tabular}
 \end{center}
 
 We want to find a line
@@ -169,6 +169,42 @@ Several properties make MSE a natural choice:
         $(w, b)$ plane, guaranteeing a unique global minimum.
 \end{itemize}
 
+\begin{example}[Evaluating $J$ for a candidate line]
+  Using the data from Section~1, try the line $w = 1$, $b = 1$, i.e.\
+  $\yhat = x + 1$:
+
+  \begin{center}
+    \begin{tabular}{ccccc}
+      \toprule
+      $x_i$ & $y_i$ & $\yhat_i = x_i + 1$ & $e_i = y_i - \yhat_i$ & $e_i^2$    \\
+      \midrule
+      1     & 1     & 2                   & $-1$                  & 1          \\
+      2     & 3     & 3                   & $\phantom{-}0$        & 0          \\
+      3     & 3     & 4                   & $-1$                  & 1          \\
+      4     & 5     & 5                   & $\phantom{-}0$        & 0          \\
+      \midrule
+            &       &                     &                       & $\sum = 2$ \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+
+  Therefore
+  \[
+    J(1, 1) = \frac{1}{4}(1 + 0 + 1 + 0) = \frac{2}{4} = 0.5.
+  \]
+
+  Now try $w = 1$, $b = 0.5$, i.e.\ $\yhat = x + 0.5$. The predictions are
+  $1.5, 2.5, 3.5, 4.5$, giving residuals $-0.5, 0.5, -0.5, 0.5$, so
+  % ── \sol applied: student computes J for the second candidate ───────────────
+  \[
+    J(1, 0.5) = \sol[7cm]{\frac{1}{4}(0.25 + 0.25 + 0.25 + 0.25) = 0.25}
+  \]
+  % ─────────────────────────────────────────────────────────────────────────────
+  The second line has a smaller $J$, so it fits the data better. Searching
+  over every $(w, b)$ by trial and error is impractical, which motivates
+  finding the minimum analytically.
+\end{example}
+
 \textbf{Goal:} find the values of $w$ and $b$ that minimise $J(w,b)$.
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -203,15 +239,15 @@ Expanding and dividing by $n$:
 
 % ── \sol applied: student fills in the result for b ──────────────────────────
 \begin{resultbox}
-\[
-  b = \sol[7cm]{\ybar - w\xbar}
-\]
+  \[
+    b = \sol[7cm]{\ybar - w\xbar}
+  \]
 \end{resultbox}
 % ─────────────────────────────────────────────────────────────────────────────
 
 \begin{notebox}
-\textbf{Interpretation.} For any slope $w$, the optimal line always passes
-through the \emph{centroid} $(\xbar, \ybar)$ of the dataset.
+  \textbf{Interpretation.} For any slope $w$, the optimal line always passes
+  through the \emph{centroid} $(\xbar, \ybar)$ of the dataset.
 \end{notebox}
 
 % ──────────────────────────────────────────────────────────────────────────────
@@ -242,18 +278,18 @@ Expanding and noting that $\sum_i \tilde{x}_i = 0$:
 
 % ── \sol applied: student fills in the result for w ──────────────────────────
 \begin{resultbox}
-\[
-  w = \sol[8cm]{\frac{\displaystyle\sum_{i=1}^{n}(x_i - \xbar)(y_i - \ybar)}
-                     {\displaystyle\sum_{i=1}^{n}(x_i - \xbar)^2}}
-\]
+  \[
+    w = \sol[8cm]{\frac{\displaystyle\sum_{i=1}^{n}(x_i - \xbar)(y_i - \ybar)}
+      {\displaystyle\sum_{i=1}^{n}(x_i - \xbar)^2}}
+  \]
 \end{resultbox}
 % ─────────────────────────────────────────────────────────────────────────────
 
 \begin{notebox}
-\textbf{Interpretation.} The optimal slope equals the \emph{sample covariance}
-of $x$ and $y$ divided by the \emph{sample variance} of $x$.
-A positive covariance (both tend to increase together) yields a positive slope,
-and vice versa.
+  \textbf{Interpretation.} The optimal slope equals the \emph{sample covariance}
+  of $x$ and $y$ divided by the \emph{sample variance} of $x$.
+  A positive covariance (both tend to increase together) yields a positive slope,
+  and vice versa.
 \end{notebox}
 
 % ──────────────────────────────────────────────────────────────────────────────
@@ -262,20 +298,20 @@ and vice versa.
 For the dataset above, $\xbar = 2.5$ and $\ybar = 3$:
 
 \begin{center}
-\renewcommand{\arraystretch}{1.3}
-\begin{tabular}{ccccc}
-\toprule
-$i$ & $x_i - \xbar$ & $y_i - \ybar$
-    & $(x_i-\xbar)(y_i-\ybar)$ & $(x_i-\xbar)^2$ \\
-\midrule
-1 & $-1.5$ & $-2$ & $3.0$ & $2.25$ \\
-2 & $-0.5$ & $\phantom{-}0$ & $0.0$ & $0.25$ \\
-3 & $\phantom{-}0.5$ & $\phantom{-}0$ & $0.0$ & $0.25$ \\
-4 & $\phantom{-}1.5$ & $\phantom{-}2$ & $3.0$ & $2.25$ \\
-\midrule
-  & & \textbf{Sum} & $6$ & $5$ \\
-\bottomrule
-\end{tabular}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{ccccc}
+    \toprule
+    $i$ & $x_i - \xbar$            & $y_i - \ybar$
+        & $(x_i-\xbar)(y_i-\ybar)$ & $(x_i-\xbar)^2$                  \\
+    \midrule
+    1   & $-1.5$                   & $-2$            & $3.0$ & $2.25$ \\
+    2   & $-0.5$                   & $\phantom{-}0$  & $0.0$ & $0.25$ \\
+    3   & $\phantom{-}0.5$         & $\phantom{-}0$  & $0.0$ & $0.25$ \\
+    4   & $\phantom{-}1.5$         & $\phantom{-}2$  & $3.0$ & $2.25$ \\
+    \midrule
+        &                          & \textbf{Sum}    & $6$   & $5$    \\
+    \bottomrule
+  \end{tabular}
 \end{center}
 
 % ── \sol applied: student computes w and b from the sums ─────────────────────
@@ -289,8 +325,8 @@ The fitted line is $\yhat = \sol{1.2\,x}$, with:
 
 \[
   \mathrm{MSE}
-  = \frac{(-0.2)^2 + (0.6)^2 + (-0.6)^2 + (0.2)^2}{4}
-  = \sol{\dfrac{0.8}{4} = 0.2} \neq 0.
+  = \sol[12cm]{\frac{(-0.2)^2 + (0.6)^2 + (-0.6)^2 + (0.2)^2}{4} \dfrac{0.8}{4} = 0.2}
+  \neq 0.
 \]
 % ─────────────────────────────────────────────────────────────────────────────
 
@@ -326,10 +362,10 @@ for the bias:
 \[
   \bX =
   \begin{bmatrix}
-    1 & x_1^{(1)} & x_2^{(1)} & \cdots & x_d^{(1)} \\
-    1 & x_1^{(2)} & x_2^{(2)} & \cdots & x_d^{(2)} \\
-    \vdots & \vdots & \vdots & \ddots & \vdots \\
-    1 & x_1^{(n)} & x_2^{(n)} & \cdots & x_d^{(n)}
+    1      & x_1^{(1)} & x_2^{(1)} & \cdots & x_d^{(1)} \\
+    1      & x_1^{(2)} & x_2^{(2)} & \cdots & x_d^{(2)} \\
+    \vdots & \vdots    & \vdots    & \ddots & \vdots    \\
+    1      & x_1^{(n)} & x_2^{(n)} & \cdots & x_d^{(n)}
   \end{bmatrix},
   \qquad
   \by =
@@ -345,6 +381,23 @@ MSE cost becomes:
 \]
 % ─────────────────────────────────────────────────────────────────────────────
 
+\begin{notebox}
+  \textbf{Notation.} Although $\bX$ is a matrix, $\by - \bX\bth \in \mathbb{R}^n$
+  is a \emph{vector} (the residual vector $\mathbf{e}$), so $\|\cdot\|$ here is
+  the ordinary \textbf{Euclidean (L2) vector norm}, not a matrix norm. For any
+  $\mathbf{v} \in \mathbb{R}^n$,
+  \[
+    \|\mathbf{v}\| = \|\mathbf{v}\|_2 = \sqrt{\sum_{i=1}^{n} v_i^2}
+    \qquad \Longrightarrow \qquad
+    \|\mathbf{v}\|_2^2 = \sum_{i=1}^{n} v_i^2 = \mathbf{v}^\top\mathbf{v}.
+  \]
+  Applied to the residuals $e_i = y^{(i)} - \yhat^{(i)}$, the squared norm
+  $\|\mathbf{e}\|_2^2 = \sum_i e_i^2$ is exactly the sum of squared errors, so
+  dividing by $n$ recovers the MSE in \eqref{eq:mse}. The subscript $2$ is often
+  omitted, and since $\|-\mathbf{v}\| = \|\mathbf{v}\|$, we may equally write
+  $\|\bX\bth - \by\|_2^2$.
+\end{notebox}
+
 % ──────────────────────────────────────────────────────────────────────────────
 \subsection{The Normal Equations}
 
@@ -352,36 +405,36 @@ Setting the gradient of $J$ with respect to $\bth$ to zero and expanding
 step by step:
 
 \begin{align*}
-  &\nabla_{\bth}\, J = \mathbf{0} \\[6pt]
-  \Rightarrow\;&
-    \nabla_{\bth}\,\frac{1}{n}\|\bX\bth - \by\|_2^2 = \mathbf{0} \\[6pt]
-  \Rightarrow\;&
-    \nabla_{\bth}
-    \left(\bX\bth - \by\right)^{\!\top}
-    \left(\bX\bth - \by\right) = \mathbf{0} \\[6pt]
-  \Rightarrow\;&
-% ── \sol applied: student expands the quadratic form ────────────────────────
-    \nabla_{\bth}\!\left(
-      \sol[9cm]{\bth^{\top}\bX^{\top}\bX\bth
-      - 2\bth^{\top}\bX^{\top}\by
-      + \by^{\top}\by}
-    \right) = \mathbf{0} \\[6pt]
-% ────────────────────────────────────────────────────────────────────────────
-  \Rightarrow\;&
-% ── \sol applied: student applies the gradient ───────────────────────────────
-    \sol[7cm]{2\bX^{\top}\bX\bth - 2\bX^{\top}\by} = \mathbf{0} \\[6pt]
-% ────────────────────────────────────────────────────────────────────────────
-  \Rightarrow\;&
-    \bX^{\top}\bX\,\bth = \bX^{\top}\by.
+                & \nabla_{\bth}\, J = \mathbf{0}               \\[6pt]
+  \Rightarrow\; &
+  \nabla_{\bth}\,\frac{1}{n}\|\bX\bth - \by\|_2^2 = \mathbf{0} \\[6pt]
+  \Rightarrow\; &
+  \nabla_{\bth}
+  \left(\bX\bth - \by\right)^{\!\top}
+  \left(\bX\bth - \by\right) = \mathbf{0}                      \\[6pt]
+  \Rightarrow\; &
+  % ── \sol applied: student expands the quadratic form ────────────────────────
+  \nabla_{\bth}\!\left(
+  \bth^{\top}\bX^{\top}\bX\bth
+  - 2\bth^{\top}\bX^{\top}\by
+  + \by^{\top}\by
+  \right) = \mathbf{0}                                         \\[6pt]
+  % ────────────────────────────────────────────────────────────────────────────
+  \Rightarrow\; &
+  % ── \sol applied: student applies the gradient ───────────────────────────────
+  2\bX^{\top}\bX\bth - 2\bX^{\top}\by = \mathbf{0}             \\[6pt]
+  % ────────────────────────────────────────────────────────────────────────────
+  \Rightarrow\; &
+  \bX^{\top}\bX\,\bth = \bX^{\top}\by.
 \end{align*}
 
 Provided $\bX^{\top}\bX$ is invertible, the unique solution is:
 
 % ── \sol applied: student writes the normal equations result ─────────────────
 \begin{resultbox}
-\[
-  \bth = \sol[8cm]{\left(\bX^{\top}\bX\right)^{-1}\bX^{\top}\by}
-\]
+  \[
+    \bth = \sol[8cm]{\left(\bX^{\top}\bX\right)^{-1}\bX^{\top}\by}
+  \]
 \end{resultbox}
 % ─────────────────────────────────────────────────────────────────────────────
 
@@ -393,85 +446,85 @@ $n$ (provided $n > d+1$ and the columns of $\bX$ are linearly independent).
 \section{Example: Two Binary Features}
 
 \begin{example}
-Consider a dataset with two binary inputs where the true relationship is
-$y = x_1 + x_2$:
+  Consider a dataset with two binary inputs where the true relationship is
+  $y = x_1 + x_2$:
 
-\begin{center}
-\begin{tabular}{ccc}
-\toprule
-$x_1$ & $x_2$ & $y$ \\
-\midrule
-0 & 0 & 0 \\
-0 & 1 & 1 \\
-1 & 0 & 1 \\
-1 & 1 & 2 \\
-\bottomrule
-\end{tabular}
-\end{center}
+  \begin{center}
+    \begin{tabular}{ccc}
+      \toprule
+      $x_1$ & $x_2$ & $y$ \\
+      \midrule
+      0     & 0     & 0   \\
+      0     & 1     & 1   \\
+      1     & 0     & 1   \\
+      1     & 1     & 2   \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
 
-The design matrix and target vector are:
-\[
-  \bX =
-  \begin{bmatrix} 1 & 0 & 0 \\ 1 & 0 & 1 \\ 1 & 1 & 0 \\ 1 & 1 & 1 \end{bmatrix},
-  \qquad
-  \by =
-  \begin{bmatrix} 0 \\ 1 \\ 1 \\ 2 \end{bmatrix}.
-\]
+  The design matrix and target vector are:
+  \[
+    \bX =
+    \begin{bmatrix} 1 & 0 & 0 \\ 1 & 0 & 1 \\ 1 & 1 & 0 \\ 1 & 1 & 1 \end{bmatrix},
+    \qquad
+    \by =
+    \begin{bmatrix} 0 \\ 1 \\ 1 \\ 2 \end{bmatrix}.
+  \]
 
-Computing:
-\[
-  \bX^{\top}\bX =
-  \begin{bmatrix} 4 & 2 & 2 \\ 2 & 2 & 1 \\ 2 & 1 & 2 \end{bmatrix},
-  \qquad
-  \bX^{\top}\by =
-  \begin{bmatrix} 4 \\ 3 \\ 3 \end{bmatrix}.
-\]
+  Computing:
+  \[
+    \bX^{\top}\bX =
+    \begin{bmatrix} 4 & 2 & 2 \\ 2 & 2 & 1 \\ 2 & 1 & 2 \end{bmatrix},
+    \qquad
+    \bX^{\top}\by =
+    \begin{bmatrix} 4 \\ 3 \\ 3 \end{bmatrix}.
+  \]
 
-Solving $(\bX^{\top}\bX)\,\bth = \bX^{\top}\by$ gives:
+  Solving $(\bX^{\top}\bX)\,\bth = \bX^{\top}\by$ gives:
 
-% ── \soleq applied: student writes the final θ solution ──────────────────────
-\soleq[2.5cm]{%
-  \bth =
-  \begin{bmatrix} b \\ w_1 \\ w_2 \end{bmatrix}
-  =
-  \begin{bmatrix} 0 \\ 1 \\ 1 \end{bmatrix}
-}
-% ─────────────────────────────────────────────────────────────────────────────
+  % ── \soleq applied: student writes the final θ solution ──────────────────────
+  \soleq[2.5cm]{%
+    \bth =
+    \begin{bmatrix} b \\ w_1 \\ w_2 \end{bmatrix}
+    =
+    \begin{bmatrix} 0 \\ 1 \\ 1 \end{bmatrix}
+  }
+  % ─────────────────────────────────────────────────────────────────────────────
 
-so $\yhat = \sol{x_1 + x_2}$ with $\mathrm{MSE} = \sol[2cm]{0}$.
+  so $\yhat = \sol{x_1 + x_2}$ with $\mathrm{MSE} = \sol[2cm]{0}$.
 
-The normal equations recover the exact underlying relationship because the
-data is truly linear.
+  The normal equations recover the exact underlying relationship because the
+  data is truly linear.
 \end{example}
 
 \begin{notebox}
-\textbf{Looking ahead.}
-In Section~1.3 we will use the same four input points
-$\{(0,0),\,(0,1),\,(1,0),\,(1,1)\}$ but change the output labels to
-$\{0,\,1,\,1,\,0\}$ (the XOR function). Applying the normal equations to
-that dataset yields $w_1 = w_2 = 0$, $b = \tfrac{1}{2}$ — the model simply
-predicts the mean $0.5$ everywhere, achieving $\mathrm{MSE} = 0.25$.
-This is the best any linear model can do on XOR, which motivates the
-need for non-linearity.
+  \textbf{Looking ahead.}
+  In the later section, we will use the same four input points
+  $\{(0,0),\,(0,1),\,(1,0),\,(1,1)\}$ but change the output labels to
+  $\{0,\,1,\,1,\,0\}$ (the XOR function). Applying the normal equations to
+  that dataset yields $w_1 = w_2 = 0$, $b = \tfrac{1}{2}$ — the model simply
+  predicts the mean $0.5$ everywhere, achieving $\mathrm{MSE} = 0.25$.
+  This is the best any linear model can do on XOR, which motivates the
+  need for non-linearity.
 \end{notebox}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Summary}
 
 \begin{center}
-\renewcommand{\arraystretch}{1.5}
-\begin{tabular}{ll}
-\toprule
-\textbf{Model}             & $\yhat = \bth^{\top}\bx$ \\
-\textbf{Loss function}     & MSE: $J = \dfrac{1}{n}\|\by - \bX\bth\|^2$ \\
-\textbf{Closed-form solution} & Normal equations: $\bth = (\bX^{\top}\bX)^{-1}\bX^{\top}\by$ \\
-\textbf{Works well when}   & The true relationship is (approximately) linear \\
-\bottomrule
-\end{tabular}
+  \renewcommand{\arraystretch}{1.5}
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Model}                & $\yhat = \bth^{\top}\bx$                                     \\
+    \textbf{Loss function}        & MSE: $J = \dfrac{1}{n}\|\by - \bX\bth\|^2$                   \\
+    \textbf{Closed-form solution} & Normal equations: $\bth = (\bX^{\top}\bX)^{-1}\bX^{\top}\by$ \\
+    \textbf{Works well when}      & The true relationship is (approximately) linear              \\
+    \bottomrule
+  \end{tabular}
 \end{center}
 
 \bigskip
-\textbf{Up next (Section~1.2):} What if the output $y$ is a \emph{category}
+\textbf{Up next:} What if the output $y$ is a \emph{category}
 rather than a continuous number? Predicting a probability requires a
 different model and a different loss function — logistic regression with
 cross-entropy.
