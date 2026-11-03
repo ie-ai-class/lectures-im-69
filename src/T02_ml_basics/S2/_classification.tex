@@ -87,6 +87,8 @@
 \newcommand{\by}{\mathbf{y}}
 \newcommand{\bw}{\mathbf{w}}
 \newcommand{\yhat}{\hat{y}}
+\newcommand{\xbar}{\bar{x}}
+\newcommand{\ybar}{\bar{y}}
 \newcommand{\sigmoid}{\sigma}
 
 % ── Document ──────────────────────────────────────────────────────────────────
@@ -124,35 +126,159 @@ For example, we might ask:
   \end{tabular}
 \end{center}
 
+\subsection{A Toy Example}
+
+Consider six observations, each labelled either class F or class T.
+We encode the labels numerically as $y = 0$ for F and $y = 1$ for T:
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabular}{c|cccccc}
+    \toprule
+    $x$     & 1 & 2 & 3 & 4 & 5 & 6 \\
+    \midrule
+    Class   & F & F & T & F & T & T \\
+    $y$     & 0 & 0 & 1 & 0 & 1 & 1 \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+Small $x$ is mostly F and large $x$ is mostly T, but the classes
+\emph{overlap} around $x = 3$ and $x = 4$.
+This is the region where we should be \emph{uncertain} about the label.
+
+\textbf{A naive attempt: linear regression.}
+Since $y$ is now a number, nothing stops us from fitting $\yhat = wx + b$
+with the closed-form solution from Section~1.1.
+Here $\xbar = 3.5$ and $\ybar = 0.5$:
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{ccccc}
+    \toprule
+    $i$ & $x_i - \xbar$            & $y_i - \ybar$
+        & $(x_i-\xbar)(y_i-\ybar)$ & $(x_i-\xbar)^2$                       \\
+    \midrule
+    1   & $-2.5$                   & $-0.5$          & $\phantom{-}1.25$ & $6.25$ \\
+    2   & $-1.5$                   & $-0.5$          & $\phantom{-}0.75$ & $2.25$ \\
+    3   & $-0.5$                   & $\phantom{-}0.5$ & $-0.25$          & $0.25$ \\
+    4   & $\phantom{-}0.5$         & $-0.5$          & $-0.25$           & $0.25$ \\
+    5   & $\phantom{-}1.5$         & $\phantom{-}0.5$ & $\phantom{-}0.75$ & $2.25$ \\
+    6   & $\phantom{-}2.5$         & $\phantom{-}0.5$ & $\phantom{-}1.25$ & $6.25$ \\
+    \midrule
+        &                          & \textbf{Sum}    & $\sol[1.5cm]{3.5}$ & $\sol[1.5cm]{17.5}$ \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+% ── \sol applied: student computes w and b from the sums ─────────────────────
+\[
+  w = \sol{\dfrac{3.5}{17.5} = 0.2},
+  \qquad
+  b = \sol{0.5 - 0.2 \times 3.5 = -0.2}.
+\]
+
+The fitted line is $\yhat = \sol{0.2\,x - 0.2}$.
+% ─────────────────────────────────────────────────────────────────────────────
+
 \textbf{Why not use linear regression?}
-If we fit $\yhat = wx + b$ directly and threshold at $0.5$, the model is
-not constrained: it can predict values far below 0 or above 1, which are
-meaningless as probabilities and sensitive to outliers.
+As a \emph{classifier}, the line is not terrible: thresholding at
+$\yhat = 0.5$ gives the boundary $x = 3.5$, right in the middle of the
+overlap.
+The trouble starts when we try to read $\yhat$ as a
+\emph{probability} of class T (see the accompanying marimo notebook):
+
+\begin{itemize}
+  \item \textbf{Values outside $[0, 1]$.}
+        At $x = 0$ the line predicts $\yhat = \sol[1.5cm]{-0.2}$, and at $x = 8$ it
+        predicts $\yhat = \sol[1.5cm]{1.4}$.
+        Neither is a valid probability.
+  \item \textbf{Constant slope.}
+        Each extra unit of $x$ adds the same $0.2$, whether we are deep inside
+        one class or in the uncertain overlap.
+        Intuitively, moving from $x = 3$ to $x = 4$ should change our belief a lot,
+        while moving from $x = 5$ to $x = 6$ (already confidently T) should change
+        it very little.
+  \item \textbf{Sensitivity to outliers.}
+        A single far-away point, e.g.\ $(x, y) = (20, 1)$, flattens the line
+        and drags the $0.5$-threshold to the right, so points that were
+        correctly classified before can become misclassified.
+\end{itemize}
+
+\subsection{What Shape Do We Want?}
+
 What we really want is a model that outputs a \emph{probability}:
 \[
   \hat{p} = P(y = 1 \mid x) \in (0, 1).
 \]
+For the toy data, a sensible curve should:
+\begin{itemize}[nosep]
+  \item stay close to $0$ for small $x$ (confidently F),
+  \item stay close to $1$ for large $x$ (confidently T),
+  \item rise \emph{smoothly} through the overlap region, passing $0.5$ near
+        $x = 3.5$, where we are least certain.
+\end{itemize}
+This is an \textbf{S-shaped} curve (see the marimo notebook), not a
+straight line.
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{The Sigmoid Function: Motivation via Log-Odds}
 
-A natural way to build a probability model is to assume that the
-\textbf{log-odds} (logit) of the event is a linear function of the input.
-
-The \textbf{odds} of an event with probability $p$ are defined as:
+We would still like to use a linear function $wx + b$: it is simple,
+interpretable, and we already know how to work with it.
+The problem is a mismatch of ranges:
 \[
-  \text{odds} = \frac{p}{1 - p}.
+  wx + b \in (-\infty, \infty)
+  \qquad \text{but} \qquad
+  p \in (0, 1).
 \]
+So instead of forcing $p$ itself to be linear in $x$, we \textbf{transform}
+$p$ into a quantity that lives on all of $\mathbb{R}$, and make
+\emph{that} quantity linear.
+We do this in two steps.
 
-We assume the \textbf{log-odds} are linear:
+\textbf{Step 1: probability $\to$ odds.}
+The \textbf{odds} of an event with probability $p$ are:
+\[
+  \text{odds} = \frac{p}{1 - p} \in (0, \infty).
+\]
+This removes the upper limit of $1$, but the odds are still positive.
+
+\textbf{Step 2: odds $\to$ log-odds.}
+Taking the logarithm maps $(0, \infty)$ onto all of $\mathbb{R}$:
+\[
+  \text{log-odds} = \log \frac{p}{1 - p} \in (-\infty, \infty).
+\]
+This quantity is also called the \textbf{logit} of $p$.
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{cccc}
+    \toprule
+    $p$   & odds $= \dfrac{p}{1-p}$  & log-odds              & Interpretation      \\
+    \midrule
+    $0.1$ & $1/9$                    & $\sol[1.5cm]{-2.20}$  & likely F            \\
+    $0.5$ & $\sol[1.5cm]{1}$         & $\sol[1.5cm]{0}$      & completely unsure   \\
+    $0.9$ & $9$                      & $\sol[1.5cm]{2.20}$   & likely T            \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+The log-odds are symmetric around $0$, and $p = 0.5$ maps exactly to $0$.
+Now the ranges match, so we model the log-odds as linear in $x$:
 
 \begin{equation}
   \log \frac{p}{1-p} = wx + b.
   \label{eq:logodds}
 \end{equation}
 
-This is a reasonable model: the log-odds can range over all of $\mathbb{R}$,
-which matches a linear function perfectly.
+\begin{notebox}
+  The log-odds is not the only possible choice: any function that maps
+  $(0, 1)$ onto $\mathbb{R}$ would work (for example, the inverse of the
+  normal CDF gives \emph{probit} regression).
+  The log-odds is preferred because it is simple and
+  interpretable: increasing $x$ by one unit multiplies the odds by $e^{w}$.
+\end{notebox}
 
 \subsection{Solving for \texorpdfstring{$p$}{p}}
 
@@ -174,6 +300,8 @@ Exponentiating both sides of \eqref{eq:logodds} and solving for $p$:
 
 This function $\sigmoid(z) = \dfrac{1}{1+e^{-z}}$ is called the
 \textbf{sigmoid} (or logistic) function.
+It is exactly the smooth S-shaped curve we asked for: by making the
+log-odds linear, the probability automatically becomes S-shaped in $x$.
 
 \begin{notebox}
   \textbf{Key properties of $\sigmoid(z)$.}
