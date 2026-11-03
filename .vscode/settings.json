@@ -7,5 +7,7 @@
     "*.md": "default",
     "*.markdown": "default"
   },
-  "latex-workshop.formatting.latex": "latexindent"
+  "latex-workshop.formatting.latex": "latexindent",
+  "pasteImage.insertPattern": "\\rimg{images/${imageFileName}}{}",
+  "pasteImage.path": "${currentFileDir}/img"
 }

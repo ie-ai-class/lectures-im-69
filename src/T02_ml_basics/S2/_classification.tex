@@ -10,7 +10,9 @@
 \usepackage{tcolorbox}
 \usepackage{enumitem}
 \usepackage{parskip}
-
+\usepackage{float}
+% Corner for images
+\usepackage{tikz}
 \geometry{margin=2.5cm}
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -74,6 +76,30 @@
   colback=notebg, colframe=orange!70!black,
   boxrule=1pt, arc=4pt,
   left=4pt, right=4pt
+}
+
+% Define a command for the corner radius of images
+\newcommand{\addcorner}{10pt}
+
+% Define a command to create a rounded image with a caption 
+\newcommand{\rimg}[2]{%
+  \begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+      \node[draw=none, rounded corners=\addcorner, inner sep=0pt, clip] (image) {%
+        \includegraphics[width=0.8\textwidth]{#1}%
+      };
+      \draw[gray, line width=1pt, rounded corners=\addcorner]
+        (image.south west) rectangle (image.north east);
+    \end{tikzpicture}
+    \caption{#2}
+  \end{figure}%
+}
+
+\tikzset{
+    roundedimg/.style={
+        rounded corners=\addcorner, % Corner radius
+    }
 }
 
 % ── Theorem environments ───────────────────────────────────────────────────────
@@ -587,6 +613,60 @@ where $\alpha > 0$ is the \textbf{learning rate}.
 Gradient descent will be covered in detail in the next section.
 
 % ══════════════════════════════════════════════════════════════════════════════
+\section{Visualising the Decision Boundary}
+
+\rimg{img/2026-11-04-05-56-54.png}{Visualising the decision boundary in 2D}
+
+The figure shows $\hat{p} = \sigmoid(b + w_1x_1 + w_2x_2)$ as a surface over the
+$(x_1, x_2)$ plane: the red points (class 1) sit on the high plateau
+($\hat{p} \approx 1$), the blue points (class 0) on the low plateau
+($\hat{p} \approx 0$), and the surface rises smoothly between them.
+The solid black line marks where the surface crosses $\hat{p} = 0.5$;
+its shadow on the floor (dotted) is the \textbf{decision boundary}.
+
+\textbf{Logistic regression draws a straight line between the classes.}
+The boundary is where the model is completely unsure:
+\[
+  \hat{p} = 0.5
+  \quad\Longleftrightarrow\quad
+  z = 0
+  \quad\Longleftrightarrow\quad
+  \sol[4.5cm]{b + w_1 x_1 + w_2 x_2 = 0}.
+\]
+This is a \emph{linear} equation in $x_1$ and $x_2$, so the boundary is a
+\textbf{straight line}.
+Every point on one side has $z > 0$ (predicted class 1), and every point on
+the other side has $z < 0$ (predicted class 0).
+
+\begin{example}[Boundary for the two-feature model]
+  With $\bth = [-3,\; 1,\; 0.5]^{\top}$ from Section~3, the boundary is
+  \[
+    -3 + x_1 + 0.5\,x_2 = 0
+    \quad\Longrightarrow\quad
+    x_2 = \sol[3cm]{6 - 2x_1}.
+  \]
+  The student with $(x_1, x_2) = (2, 4)$ has $z = 1 > 0$, so they lie on the
+  class-1 side of the line, which agrees with $\hat{p} \approx 0.73$.
+\end{example}
+
+\begin{notebox}
+  \textbf{What the sigmoid adds.}
+  The line itself comes only from $z = \bth^{\top}\bx$.
+  The sigmoid turns the \emph{distance} from the line into a confidence:
+  points near the line have $\hat{p} \approx 0.5$, and points far away have
+  $\hat{p}$ close to $0$ or $1$.
+  Scaling all of $\bth$ by the same factor keeps the line in place but makes
+  the transition steeper.
+
+  \textbf{Limitation.}
+  With $d$ features the boundary is a hyperplane, but it is always
+  \emph{flat}. If the classes cannot be separated by a straight line (or plane),
+  logistic regression cannot classify them correctly. We return to this in
+  Section~1.3.
+\end{notebox}
+
+
+% ══════════════════════════════════════════════════════════════════════════════
 \section{Summary}
 
 \begin{center}
@@ -602,11 +682,6 @@ Gradient descent will be covered in detail in the next section.
   \end{tabular}
 \end{center}
 
-\bigskip
-\textbf{Up next (Section~1.3):} What if no linear boundary can separate the
-classes?  We revisit the XOR dataset to show that both linear regression and
-logistic regression fail — motivating the need for non-linearity and neural
-networks.
 
 % ══════════════════════════════════════════════════════════════════════════════
 \appendix
