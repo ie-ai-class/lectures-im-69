@@ -13,3 +13,6 @@
 - [HTML](/src/T01_intro/T01.html)
 - [PDF](/src/T01_intro/T01.pdf)
 
+# Lecture 1: Linear Regression
+- [HTML](/src/T02_mlp_basics/S1/_linear_regression.html)
+- [PDF](/src/T02_mlp_basics/S1/_linear_regression.pdf)
