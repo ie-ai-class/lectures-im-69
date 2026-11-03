@@ -13,6 +13,9 @@
 - [HTML](/src/T01_intro/T01.html)
 - [PDF](/src/T01_intro/T01.pdf)
 
-# Lecture 1: Linear Regression
-- [HTML](/src/T02_mlp_basics/S1/_linear_regression.html)
-- [PDF](/src/T02_mlp_basics/S1/_linear_regression.pdf)
+# Machine Learning Basics
+
+| Topic             | Exercise                                                   | Solution                                                    |
+| ----------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
+| Linear Regression | [PDF](/src/T02_ml_basics/S1/linear_regression_student.pdf) | [PDF](/src/T02_ml_basics/S1/linear_regression_solution.pdf) |
+| Classification    | [PDF](/src/T02_ml_basics/S2/classification_student.pdf)    | [PDF](/src/T02_ml_basics/S2/classification_solution.pdf)    |
