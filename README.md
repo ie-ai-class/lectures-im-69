@@ -1,6 +1,5 @@
-# Course Information
+# Practical Artificial Intelligence for Smart Industries
 
-- Title: _AI-IM Class 2569_ 
 - Course Number: `265749`
 - Semester: `Winter 2026`
 - Instructors: [Asst. Prof. Nirand Pisutha-Arnond, Ph.D., Department of Industrial Engineering](https://ie.eng.cmu.ac.th/en/people/faculty/56)
