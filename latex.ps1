@@ -28,15 +28,8 @@ function Compile-LaTeXDocument {
     }
 }
 
-# $folder = "src/T02_ml_basics/S1"
-# $stem = "_linear_regression"
-# pdflatex -jobname "${folder}/$($stem.Substring(1))_student"  "\def\studentflag{1}\input{$folder/$stem}"
-# pdflatex -jobname "${folder}/$($stem.Substring(1))_student"  "\def\studentflag{1}\input{$folder/$stem}"
-# pdflatex -jobname "${folder}/$($stem.Substring(1))_solution" "\input{$folder/$stem}"
-# pdflatex -jobname "${folder}/$($stem.Substring(1))_solution" "\input{$folder/$stem}"
-
 Compile-LaTeXDocument -Folder "src/T02_ml_basics/S1" -Stem "_linear_regression"
-#Compile-LaTeXDocument -Folder "src/T02_ml_basics/S2" -Stem "_classification"
+Compile-LaTeXDocument -Folder "src/T02_ml_basics/S2" -Stem "_classification"
 # Compile-LaTeXDocument -Folder "src/T03_ffn_basics/S1" -Stem "_xor"
 # Compile-LaTeXDocument -Folder "src/T03_ffn_basics/S2" -Stem "_gradient_descent"
 # Compile-LaTeXDocument -Folder "src/T03_ffn_basics/S3" -Stem "_forward_pass"

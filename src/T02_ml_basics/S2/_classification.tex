@@ -319,7 +319,77 @@ log-odds linear, the probability automatically becomes S-shaped in $x$.
 % ══════════════════════════════════════════════════════════════════════════════
 \section{The Logistic Regression Model}
 
-For $d$ features, the model generalises directly:
+So far we have used a single feature $x$, and the sigmoid's input is the
+number $z = wx + b$.
+With more features, \textbf{only $z$ changes}: it is still a single number,
+it just collects more terms.
+
+\subsection{Two Features: Writing It Out}
+
+Suppose each observation has two features $x_1$ and $x_2$
+(e.g.\ hours studied and hours slept).
+The log-odds are now linear in both:
+\[
+  z = b + w_1 x_1 + w_2 x_2,
+  \qquad
+  \hat{p} = \sigmoid(z) = \frac{1}{1 + e^{-z}}.
+\]
+
+To write this compactly, collect the parameters and the features
+(with a leading $1$ for the bias, as in Section~1.1) into column vectors:
+\[
+  \bth = \begin{bmatrix} b \\ w_1 \\ w_2 \end{bmatrix},
+  \qquad
+  \bx = \begin{bmatrix} 1 \\ x_1 \\ x_2 \end{bmatrix}.
+\]
+Then $\bth^{\top}$ is a \emph{row} vector, and multiplying a row by a column
+gives back exactly the same sum:
+\[
+  \bth^{\top}\bx
+  = \begin{bmatrix} b & w_1 & w_2 \end{bmatrix}
+    \begin{bmatrix} 1 \\ x_1 \\ x_2 \end{bmatrix}
+  = \sol[5cm]{b \cdot 1 + w_1 x_1 + w_2 x_2}.
+\]
+Size check: $(1 \times 3)\,(3 \times 1) = (1 \times 1)$, a \textbf{single number}.
+
+\begin{example}[Computing $\hat{p}$ with two features]
+  Let $\bth = [-3,\; 1,\; 0.5]^{\top}$ and consider a student with
+  $x_1 = 2$ hours studied and $x_2 = 4$ hours slept, so
+  $\bx = [1,\; 2,\; 4]^{\top}$.
+
+  % ── \sol applied: student evaluates z and p ────────────────────────────────
+  \[
+    z = \bth^{\top}\bx
+    = \begin{bmatrix} -3 & 1 & 0.5 \end{bmatrix}
+      \begin{bmatrix} 1 \\ 2 \\ 4 \end{bmatrix}
+    = \sol[6cm]{(-3)(1) + (1)(2) + (0.5)(4) = 1}
+  \]
+  \[
+    \hat{p} = \sigmoid(z) = \sol[6cm]{\frac{1}{1 + e^{-1}} \approx 0.73}
+  \]
+  % ──────────────────────────────────────────────────────────────────────────
+
+  Since $\hat{p} \ge 0.5$, the predicted class is $\hat{y} = \sol[1cm]{1}$ (pass).
+\end{example}
+
+\subsection{Any Number of Features}
+
+For $d$ features the pattern is the same; the vectors just get longer:
+\[
+  z = \bth^{\top}\bx
+  = \underbrace{b + w_1 x_1 + w_2 x_2 + \cdots + w_d x_d}_{\text{still one number}}.
+\]
+
+\begin{notebox}
+  No matter how many features we have, $\bth^{\top}\bx$ is a
+  \textbf{single number} (a scalar).
+  The sigmoid only ever sees one number $z$, so everything we learned
+  about $\sigmoid(z)$ for one feature carries over unchanged.
+  The decision boundary $z = 0$ is a point when $d = 1$, a line when $d = 2$,
+  and a plane (hyperplane) for larger $d$.
+\end{notebox}
+
+Writing the observation index $i$ explicitly, the model is:
 
 \begin{equation}
   \hat{p}^{(i)} = \sigmoid\!\left(\bth^{\top}\bx^{(i)}\right)
@@ -339,6 +409,26 @@ The predicted class is:
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Cost Function: Cross-Entropy via MLE}
 
+\begin{notebox}
+  \textbf{Why not MSE again?}
+  Technically, we \emph{could} reuse the MSE from Section~1.1,
+  $J(\bth) = \frac{1}{n}\sum_{i}\bigl(y^{(i)} - \hat{p}^{(i)}\bigr)^2$,
+  but it is a poor choice for classification:
+  \begin{enumerate}[nosep]
+    \item \textbf{Weak learning from big mistakes.}
+          When the model is confidently wrong ($\hat{p}$ near $0$ or $1$),
+          the sigmoid is flat, so the MSE gradient is tiny and the model
+          barely corrects itself.
+    \item \textbf{Non-convex.}
+          Combined with the sigmoid, MSE is non-convex in $\bth$, so gradient
+          descent can stall on plateaus or local minima.
+    \item \textbf{Wrong noise model.}
+          MSE suits continuous outputs with Gaussian noise; our labels are
+          $0$/$1$, which are naturally modelled as Bernoulli.
+  \end{enumerate}
+  Deriving the loss from the Bernoulli likelihood (below) fixes all three.
+\end{notebox}
+
 \subsection{Setting Up the Likelihood}
 
 We model each label $y^{(i)}$ as a Bernoulli random variable with success
@@ -349,7 +439,77 @@ probability $\hat{p}^{(i)}$:
   \left(1 - \hat{p}^{(i)}\right)^{1 - y^{(i)}}.
 \]
 
-Assuming the $n$ observations are independent, the joint likelihood is:
+\textbf{Reading the formula.}
+The model gives $\hat{p}^{(i)}$, the probability that $y^{(i)} = 1$.
+What we want is the probability of the label we \emph{actually observed}:
+\[
+  P\!\left(y^{(i)} \mid \bx^{(i)};\,\bth\right) =
+  \begin{cases}
+    \hat{p}^{(i)}     & \text{if } y^{(i)} = 1, \\[2pt]
+    1 - \hat{p}^{(i)} & \text{if } y^{(i)} = 0.
+  \end{cases}
+\]
+The Bernoulli formula is just a compact way to write these two cases in one
+line. The exponents work like a switch:
+
+% ── \sol applied: student checks both cases of the switch ────────────────────
+\begin{center}
+  \renewcommand{\arraystretch}{1.4}
+  \begin{tabular}{lll}
+    $y = 1$: & $\hat{p}^{\,1}\,(1-\hat{p})^{0}$
+             & $= \sol[2.5cm]{\hat{p} \cdot 1 = \hat{p}}$ \\
+    $y = 0$: & $\hat{p}^{\,0}\,(1-\hat{p})^{1}$
+             & $= \sol[2.5cm]{1 \cdot (1-\hat{p}) = 1 - \hat{p}}$
+  \end{tabular}
+\end{center}
+% ─────────────────────────────────────────────────────────────────────────────
+
+Anything raised to the power $0$ equals $1$, so the factor that does not
+match the observed label simply disappears.
+
+\begin{example}[Probability of the observed labels]
+  A model gives the following predictions for four observations:
+
+  % ── \sol applied: student fills in the probability of each observed label ──
+  \begin{center}
+    \renewcommand{\arraystretch}{1.4}
+    \begin{tabular}{cccc}
+      \toprule
+      $i$ & Observed $y^{(i)}$ & Predicted $\hat{p}^{(i)}$
+          & $\left(\hat{p}^{(i)}\right)^{y^{(i)}}\left(1-\hat{p}^{(i)}\right)^{1-y^{(i)}}$ \\
+      \midrule
+      1   & 0 & 0.1 & $0.1^{0} \times 0.9^{1} = 0.9$            \\
+      2   & 1 & 0.8 & $0.8^{1} \times 0.2^{0} = 0.8$            \\
+      3   & 1 & 0.6 & $\sol[4cm]{0.6^{1} \times 0.4^{0} = 0.6}$ \\
+      4   & 0 & 0.3 & $\sol[4cm]{0.3^{0} \times 0.7^{1} = 0.7}$ \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+
+  Each entry is the probability the model assigns to what \emph{really}
+  happened. A value close to $1$ means the model predicted that observation
+  well; a value close to $0$ means it was confidently wrong.
+
+  Assuming the observations are independent, the probability of seeing
+  \emph{all four} labels is the product:
+  \[
+    \mathcal{L}
+    = \sol[8cm]{0.9 \times 0.8 \times 0.6 \times 0.7 \approx 0.302}
+  \]
+
+  Now compare a worse model that predicts $\hat{p} = 0.6,\ 0.3,\ 0.4,\ 0.8$
+  for the same four observations:
+  \[
+    \mathcal{L}
+    = \sol[8cm]{0.4 \times 0.3 \times 0.4 \times 0.2 \approx 0.010}
+  \]
+  The better model gives the observed data a much higher probability.
+  \textbf{Maximum likelihood estimation (MLE)} simply chooses the
+  parameters $\bth$ that make this product as large as possible.
+\end{example}
+
+In general, assuming the $n$ observations are independent, the joint
+likelihood is:
 \[
   \mathcal{L}(\bth)
   = \prod_{i=1}^{n}
