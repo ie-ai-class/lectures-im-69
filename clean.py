@@ -1,109 +1,93 @@
-import os, sys, shutil
+"""Delete image files that are not referenced by a LaTeX file.
+
+For each TeX file, every image under its image folder (``img/`` next to the
+TeX file) that is not referenced in the (uncommented) TeX source is removed.
+Edit the INPUTS section below, then run the script.
+"""
+
+import glob
+import os
 import re
-import ntpath
 
 ############ INPUTS ###############
-# list of Tex files to parse
-# (they should all be within the same folder, as the image paths
-# are computed relative to the first TeX file)
-texPathList = ["src/main.tex"]
+# TeX file(s) to clean; glob patterns are allowed, e.g. r"src\**\_*.tex"
+texPathList = [
+    r"src\T02_ml_basics\S1\_linear_regression.tex",
+    r"src\T02_ml_basics\S2\_classification.tex",
+]
 
-# extensions to search
-extensions = [".png", ".jpg", ".jpeg", ".pdf", ".eps"]
+# image folder, relative to each TeX file
+imgFolder = "img"
 
-bExcludeComments = True  # if True, files appearing in comments will not be kept
-# path where all used images and the modified TeX files should be copied
-# (you can then copy over missing files, e.g. other types of images, Bib files...)
+# if True, only list the files that would be deleted (nothing is removed)
+bDryRun = False
 
-# location of the new folder (should not exist already)
-exportFolder = "./clean_export"
+# extensions considered to be images
+extensions = [".png", ".jpg", ".jpeg", ".pdf", ".eps", ".svg"]
+###################################
 
-#  should all other files in the root folder (not in subfolders) be copied ?
-# (temporary TeX compilation files are not copied)
-bCopyOtherRootFiles = True
+# a % that is not escaped (\%) starts a comment
+COMMENT_RE = re.compile(r"(?<!\\)%.*")
+# anything inside braces ending with an image extension, e.g. {img/foo.png}
+REF_RE = re.compile(
+    r"\{([^{}]+?(?:" + "|".join(re.escape(e) for e in extensions) + r"))\}",
+    re.IGNORECASE,
+)
 
-############## CREATE CLEAN FOLDER #################
-# 1 - load TeX files
-text = ""
-for path in texPathList:
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        text = text + f.read()
 
-# 2 - find all occurrences of the extension
-global_matches = []
-for extension in extensions:
-    escaped_extension = "\\" + extension  # so that the point is correctly accounted for
-    pattern = r"\{[^}]+" + escaped_extension + "}"
-    if not bExcludeComments:  # simply find all occurrences
-        matches = re.findall(pattern=pattern, string=text)  # does not give the position
-    else:  # more involved search
-        # 2.1 - find all matches
-        positions, matches = [], []
-        regex = re.compile(pattern)
-        for m in regex.finditer(text):
-            print(m.start(), m.group())
-            positions.append(m.start())
-            matches.append(m.group())
-        # 2.2 - remove matches which appear in a commented line
-        # parse list in reverse order and remove if necessary
-        for i in range(len(matches) - 1, -1, -1):
-            # look backwards in text for the first occurrence of '\n' or '%'
-            startPosition = positions[i]
-            while True:
-                if text[startPosition] == "%":
-                    # the line is commented
-                    print('file "{}" is commented (discarded)'.format(matches[i]))
-                    positions.pop(i)
-                    matches.pop(i)
-                    break
-                if text[startPosition] == "\n":
-                    # the line is not commented --> we keep it
-                    break
-                startPosition -= 1
-    global_matches = global_matches + matches
+def norm(path):
+    return os.path.normcase(os.path.normpath(path))
 
-# 3 - make sure there are no duplicates
-fileList = set(global_matches)
-if len(global_matches) != len(fileList):
-    print("WARNING: it seems you have duplicate images in your TeX")
-# 3.1 - remove curly braces
-fileList = [m[1:-1] for m in fileList]
 
-# 4 - copy the used images to the designated new location
-try:
-    os.makedirs(exportFolder)
-except FileExistsError:
-    raise Exception("The new folder already exists, please delete it first")
+def referenced_images(tex_path):
+    """Return the set of absolute, normalized image paths used in tex_path."""
+    with open(tex_path, "r", encoding="utf-8", errors="replace") as f:
+        text = "".join(COMMENT_RE.sub("", line) for line in f)
+    tex_dir = os.path.dirname(os.path.abspath(tex_path))
+    return {norm(os.path.join(tex_dir, ref.strip())) for ref in REF_RE.findall(text)}
 
-texRoot = os.path.dirname(texPathList[0])
-for m in fileList:
-    absolutePath = os.path.join(texRoot, m)
-    shutil.copy(absolutePath, exportFolder)
 
-# 5 - copy the TeX files also, and modify the image paths they refer to
-for path in texPathList:
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        text = f.read()
-    for m in fileList:
-        text = text.replace(m, ntpath.basename(m))
-    newPath = os.path.join(exportFolder, ntpath.basename(path))
-    with open(newPath, "w", encoding="utf-8") as f:
-        f.write(text)
+def clean(tex_path):
+    tex_dir = os.path.dirname(os.path.abspath(tex_path))
+    img_dir = os.path.join(tex_dir, imgFolder)
+    print(f"\n== {tex_path}")
+    if not os.path.isdir(img_dir):
+        print(f"   no image folder '{img_dir}', skipping")
+        return
 
-# 6 - if chosen, copy over all the other files (except TeX temp files)
-# which are directly at the root of the original TeX folder
-if bCopyOtherRootFiles:
-    excludedExtensions = [".aux", ".bak", ".blg", ".bbl", ".spl", ".gz", ".out", ".log"]
-    for filename in os.listdir(texRoot):
-        fullPath = os.path.join(texRoot, filename)
-        if os.path.isfile(fullPath):
-            ext = os.path.splitext(filename)[1]
-            # do not copy already modified TeX files
-            if not (filename in [ntpath.basename(tex) for tex in texPathList]):
-                # do not copy temporary files
-                if not (ext.lower() in excludedExtensions):
-                    # do not copy files we have already taken care of
-                    if not (ext.lower() in extensions):
-                        shutil.copy(fullPath, exportFolder)
+    used = referenced_images(tex_path)
+    removed = 0
+    for root, _, files in os.walk(img_dir):
+        for name in sorted(files):
+            if os.path.splitext(name)[1].lower() not in extensions:
+                continue
+            full = os.path.join(root, name)
+            if norm(full) in used:
+                continue
+            print(
+                f"   {'would delete' if bDryRun else 'deleting'}: "
+                f"{os.path.relpath(full, tex_dir)}"
+            )
+            if not bDryRun:
+                os.remove(full)
+            removed += 1
 
-# The export folder now contains the modified TeX files and all the required files !
+    # sanity check: references that point to missing files
+    for path in sorted(used):
+        if not os.path.exists(path):
+            print(
+                f"   WARNING: referenced but missing: {os.path.relpath(path, tex_dir)}"
+            )
+
+    print(
+        f"   {len(used)} referenced, {removed} unused "
+        f"{'found' if bDryRun else 'deleted'}"
+    )
+
+
+# run relative to this script's folder so the paths above work from anywhere
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+for pattern in texPathList:
+    for tex in glob.glob(pattern, recursive=True) or [pattern]:
+        clean(tex)
