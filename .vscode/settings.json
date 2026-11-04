@@ -8,6 +8,6 @@
     "*.markdown": "default"
   },
   "latex-workshop.formatting.latex": "latexindent",
-  "pasteImage.insertPattern": "\\rimg{images/${imageFileName}}{}",
+  "pasteImage.insertPattern": "\\rimg{img/${imageFileName}}{}",
   "pasteImage.path": "${currentFileDir}/img"
 }
