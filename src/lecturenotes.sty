@@ -1,0 +1,122 @@
+% ══════════════════════════════════════════════════════════════════════════════
+% lecturenotes.sty — shared preamble for all lecture notes
+%
+%   Loads packages and page layout, defines colors, boxes, theorem
+%   environments and image helpers, and pulls in:
+%     studentmode.sty  — \ifstudentmode, \sol, \soleq
+%     lecturemath.sty  — math shorthands (\bx, \yhat, \pd, …)
+%
+%   Usage (in each lecture file, right after \documentclass):
+%     \makeatletter\def\input@path{{../../}}\makeatother
+%     \usepackage{lecturenotes}
+% ══════════════════════════════════════════════════════════════════════════════
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{lecturenotes}[2026/11/04 Shared preamble for lecture notes]
+
+% ── Packages ──────────────────────────────────────────────────────────────────
+\RequirePackage{amsmath, amssymb, amsthm}
+\RequirePackage{geometry}
+\RequirePackage{booktabs}
+\RequirePackage{array}
+\RequirePackage{xcolor}
+\RequirePackage{tcolorbox}
+\RequirePackage{enumitem}
+\RequirePackage{parskip}
+\RequirePackage{float}
+\RequirePackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+\RequirePackage{hyperref}
+
+\geometry{margin=2.5cm}
+
+\RequirePackage{studentmode}
+\RequirePackage{lecturemath}
+
+% ── Colors ────────────────────────────────────────────────────────────────────
+\definecolor{mainblue}{RGB}{30, 100, 180}
+\definecolor{boxbg}{RGB}{235, 243, 255}
+\definecolor{notebg}{RGB}{255, 248, 230}
+\definecolor{warnbg}{RGB}{255, 235, 235}
+\definecolor{greenbg}{RGB}{230, 255, 235}
+\definecolor{purplebg}{RGB}{245, 235, 255}
+
+% ── Boxes ─────────────────────────────────────────────────────────────────────
+\tcbuselibrary{skins, breakable}
+
+\newtcolorbox{resultbox}{
+  colback=boxbg, colframe=mainblue,
+  boxrule=1.2pt, arc=4pt,
+  title={Result},
+  fonttitle=\bfseries\color{white},
+  coltitle=white, attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=mainblue, arc=3pt}
+}
+
+\newtcolorbox{notebox}{
+  colback=notebg, colframe=orange!70!black,
+  boxrule=1pt, arc=4pt,
+  left=4pt, right=4pt
+}
+
+\newtcolorbox{warnbox}{
+  colback=warnbg, colframe=red!60!black,
+  boxrule=1pt, arc=4pt,
+  left=4pt, right=4pt
+}
+
+\newtcolorbox{stepbox}[1]{
+  colback=greenbg, colframe=green!50!black,
+  boxrule=1pt, arc=4pt,
+  title={#1},
+  fonttitle=\bfseries,
+  coltitle=green!30!black
+}
+
+\newtcolorbox{patternbox}{
+  colback=purplebg, colframe=purple!60!black,
+  boxrule=1.2pt, arc=4pt,
+  title={Pattern},
+  fonttitle=\bfseries\color{white},
+  coltitle=white, attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=purple!70!black, arc=3pt}
+}
+
+\newtcolorbox{purplebox}{
+  colback=purplebg, colframe=purple!60!black,
+  boxrule=1.4pt, arc=4pt,
+  title={Adam Update Rule},
+  fonttitle=\bfseries\color{white},
+  coltitle=white, attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=purple!70!black, arc=3pt}
+}
+
+% ── Theorem environments ──────────────────────────────────────────────────────
+\theoremstyle{definition}
+\newtheorem{example}{Example}[section]
+
+% ── Images ────────────────────────────────────────────────────────────────────
+% Corner radius for rounded images
+\newcommand{\addcorner}{10pt}
+
+% \rimg{<path>}{<caption>} — rounded-corner figure, 0.8\textwidth wide
+\newcommand{\rimg}[2]{%
+  \begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+      \node[draw=none, rounded corners=\addcorner, inner sep=0pt, clip] (image) {%
+        \includegraphics[width=0.8\textwidth]{#1}%
+      };
+      \draw[gray, line width=1pt, rounded corners=\addcorner]
+      (image.south west) rectangle (image.north east);
+    \end{tikzpicture}
+    \caption{#2}
+  \end{figure}%
+}
+
+\tikzset{
+  roundedimg/.style={
+      rounded corners=\addcorner, % Corner radius
+    }
+}
+
+\endinput

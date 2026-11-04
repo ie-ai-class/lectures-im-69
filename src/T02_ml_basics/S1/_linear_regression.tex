@@ -1,103 +1,12 @@
 \documentclass[12pt, a4paper]{article}
 
-% ── Packages ──────────────────────────────────────────────────────────────────
-\usepackage{amsmath, amssymb, amsthm}
-\usepackage{geometry}
-\usepackage{booktabs}
-\usepackage{array}
-\usepackage{hyperref}
-\usepackage{xcolor}
-\usepackage{tcolorbox}
-\usepackage{enumitem}
-\usepackage{parskip}
-
-\geometry{margin=2.5cm}
-
-% ══════════════════════════════════════════════════════════════════════════════
-% ── Student-mode switch ───────────────────────────────────────────────────────
-%
-%   \studentmodetrue  → student version: blanks replace selected equations
-%   \studentmodefalse → instructor version: all equations shown in full
-%
-\newif\ifstudentmode
-\studentmodefalse       % default: instructor mode
-
-\ifx\studentflag\undefined
-  % no flag passed — keep studentmodefalse
-\else
-  \studentmodetrue
-\fi
-% ══════════════════════════════════════════════════════════════════════════════
-
-% ── Student-mode macros ───────────────────────────────────────────────────────
-%
-%  \sol[<width>]{<math content>}
-%    Use INSIDE a math environment (display or inline).
-%    Student mode  → underlined blank of <width> (default 6cm).
-%    Instructor mode → renders <math content> normally.
-%    Example:  \[ J(w,b) = \sol{\frac{1}{n}\sum(y_i - wx_i - b)^2} \]
-%
-\newcommand{\sol}[2][6cm]{%
-  \ifstudentmode
-    \underline{\hspace{#1}}%
-  \else
-    {#2}%
-  \fi
-}
-
-%  \soleq[<height>]{<math content>}
-%    Replaces an ENTIRE displayed equation with a blank ruled box.
-%    Student mode  → two horizontal rules with <height> gap (default 3cm).
-%    Instructor mode → renders \[ <math content> \] normally.
-%    Example:  \soleq{\bth = (\bX^\top\bX)^{-1}\bX^\top\by}
-%
-\newcommand{\soleq}[2][3cm]{%
-  \ifstudentmode
-    \par\vspace{4pt}%
-    \noindent\rule{\linewidth}{0.5pt}\\[#1]%
-    \noindent\rule{\linewidth}{0.5pt}%
-    \par\vspace{4pt}%
-  \else
-    \[#2\]%
-  \fi
-}
-% ──────────────────────────────────────────────────────────────────────────────
-
-% ── Colors & boxes ────────────────────────────────────────────────────────────
-\definecolor{mainblue}{RGB}{30, 100, 180}
-\definecolor{boxbg}{RGB}{235, 243, 255}
-\definecolor{notebg}{RGB}{255, 248, 230}
-
-\tcbuselibrary{skins, breakable}
-
-\newtcolorbox{resultbox}{
-  colback=boxbg, colframe=mainblue,
-  boxrule=1.2pt, arc=4pt,
-  title={Result},
-  fonttitle=\bfseries\color{white},
-  coltitle=white, attach boxed title to top left={yshift=-2mm, xshift=4mm},
-  boxed title style={colback=mainblue, arc=3pt}
-}
-
-\newtcolorbox{notebox}{
-  colback=notebg, colframe=orange!70!black,
-  boxrule=1pt, arc=4pt,
-  left=4pt, right=4pt
-}
-
-% ── Theorem environments ───────────────────────────────────────────────────────
-\theoremstyle{definition}
-\newtheorem{example}{Example}[section]
-
-% ── Math macros ───────────────────────────────────────────────────────────────
-\newcommand{\bth}{\boldsymbol{\theta}}
-\newcommand{\bx}{\mathbf{x}}
-\newcommand{\bX}{\mathbf{X}}
-\newcommand{\by}{\mathbf{y}}
-\newcommand{\bw}{\mathbf{w}}
-\newcommand{\xbar}{\bar{x}}
-\newcommand{\ybar}{\bar{y}}
-\newcommand{\yhat}{\hat{y}}
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
 
 % ── Document ──────────────────────────────────────────────────────────────────
 \begin{document}

@@ -14,16 +14,24 @@ function Compile-LaTeXDocument {
 
     # Define build targets: Key = suffix, Value = latex code preamble
     $targets = @(
-        @{ Suffix = "student"; Code = "\def\studentflag{1}\input{$Folder/$Stem}" },
-        @{ Suffix = "solution"; Code = "\input{$Folder/$Stem}" }
+        @{ Suffix = "student"; Code = "\def\studentflag{1}\input{$Stem}" },
+        @{ Suffix = "solution"; Code = "\input{$Stem}" }
     )
 
     foreach ($target in $targets) {
-        $jobName = "$Folder/${cleanStem}_$($target.Suffix)"
-        
-        # Run pdflatex for the specified number of passes (to resolve references)
-        1..$Passes | ForEach-Object {
-            pdflatex -jobname "$jobName" "$($target.Code)"
+        $jobName = "${cleanStem}_$($target.Suffix)"
+
+        # Compile from the document's own folder so relative paths
+        # (img/..., ../../*.sty) resolve the same way as in LaTeX Workshop
+        Push-Location $Folder
+        try {
+            # Run pdflatex for the specified number of passes (to resolve references)
+            1..$Passes | ForEach-Object {
+                pdflatex -jobname "$jobName" "$($target.Code)"
+            }
+        }
+        finally {
+            Pop-Location
         }
     }
 }

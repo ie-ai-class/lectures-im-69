@@ -1,0 +1,64 @@
+% ══════════════════════════════════════════════════════════════════════════════
+% studentmode.sty — student / instructor switch and fill-in-the-blank macros
+% ══════════════════════════════════════════════════════════════════════════════
+%
+%   Compile with: \def\studentflag{1}\input{...}  → student version (blanks)
+%   Compile with: \input{...}                      → instructor version (full)
+%
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{studentmode}[2026/11/04 Student/instructor mode macros]
+
+\RequirePackage{xcolor}
+
+% ── Switch ────────────────────────────────────────────────────────────────────
+\newif\ifstudentmode
+\studentmodefalse       % default: instructor mode
+
+\ifx\studentflag\undefined
+  % no flag passed — keep studentmodefalse
+\else
+  \studentmodetrue
+\fi
+
+% ── Highlight color ──────────────────────────────────────────────────────────
+%  In instructor mode, content that becomes a blank in the student copy is
+%  printed in this color, so you can see at a glance what students won't see.
+\definecolor{solcolor}{RGB}{200, 30, 30}
+
+% ── Macros ───────────────────────────────────────────────────────────────────
+%
+%  \sol[<width>]{<math content>}
+%    Use INSIDE a math environment (display or inline).
+%    Student mode    → underlined blank of <width> (default 6cm).
+%    Instructor mode → renders <math content> in solcolor.
+%    Example:  \[ J(w,b) = \sol{\frac{1}{n}\sum(y_i - wx_i - b)^2} \]
+%
+\newcommand{\sol}[2][6cm]{%
+  \ifstudentmode
+    \underline{\hspace{#1}}%
+  \else
+    {\color{solcolor}#2}%
+  \fi
+}
+
+%  \soleq[<height>]{<math content>}
+%    Replaces an ENTIRE displayed equation with a blank ruled box.
+%    Student mode    → two horizontal rules with <height> gap (default 3cm).
+%    Instructor mode → renders \[ <math content> \] in solcolor.
+%    Example:  \soleq{\bth = (\bX^\top\bX)^{-1}\bX^\top\by}
+%
+%    (\color sits inside \[ … \] on purpose: placed before the display it can
+%     start an empty paragraph and add unwanted vertical space.)
+%
+\newcommand{\soleq}[2][3cm]{%
+  \ifstudentmode
+    \par\vspace{4pt}%
+    \noindent\rule{\linewidth}{0.5pt}\\[#1]%
+    \noindent\rule{\linewidth}{0.5pt}%
+    \par\vspace{4pt}%
+  \else
+    \[\color{solcolor}#2\]%
+  \fi
+}
+
+\endinput

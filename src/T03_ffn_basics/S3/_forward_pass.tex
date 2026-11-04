@@ -1,103 +1,12 @@
 \documentclass[12pt, a4paper]{article}
 
-% ── Packages ──────────────────────────────────────────────────────────────────
-\usepackage{amsmath, amssymb, amsthm}
-\usepackage{geometry}
-\usepackage{booktabs}
-\usepackage{array}
-\usepackage{hyperref}
-\usepackage{xcolor}
-\usepackage{tcolorbox}
-\usepackage{enumitem}
-\usepackage{parskip}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning, calc}
-
-\geometry{margin=2.5cm}
-
-% ══════════════════════════════════════════════════════════════════════════════
-% ── Student-mode switch ───────────────────────────────────────────────────────
-\newif\ifstudentmode
-\studentmodefalse
-
-\ifx\studentflag\undefined
-\else
-  \studentmodetrue
-\fi
-% ══════════════════════════════════════════════════════════════════════════════
-
-% ── Student-mode macros ───────────────────────────────────────────────────────
-\newcommand{\sol}[2][6cm]{%
-  \ifstudentmode
-    \underline{\hspace{#1}}%
-  \else
-    {#2}%
-  \fi
-}
-
-\newcommand{\soleq}[2][3cm]{%
-  \ifstudentmode
-    \par\vspace{4pt}%
-    \noindent\rule{\linewidth}{0.5pt}\\[#1]%
-    \noindent\rule{\linewidth}{0.5pt}%
-    \par\vspace{4pt}%
-  \else
-    \[#2\]%
-  \fi
-}
-% ──────────────────────────────────────────────────────────────────────────────
-
-% ── Colors & boxes ────────────────────────────────────────────────────────────
-\definecolor{mainblue}{RGB}{30, 100, 180}
-\definecolor{boxbg}{RGB}{235, 243, 255}
-\definecolor{notebg}{RGB}{255, 248, 230}
-\definecolor{warnbg}{RGB}{255, 235, 235}
-\definecolor{greenbg}{RGB}{230, 255, 235}
-
-\tcbuselibrary{skins, breakable}
-
-\newtcolorbox{resultbox}{
-  colback=boxbg, colframe=mainblue,
-  boxrule=1.2pt, arc=4pt,
-  title={Result},
-  fonttitle=\bfseries\color{white},
-  coltitle=white, attach boxed title to top left={yshift=-2mm, xshift=4mm},
-  boxed title style={colback=mainblue, arc=3pt}
-}
-
-\newtcolorbox{notebox}{
-  colback=notebg, colframe=orange!70!black,
-  boxrule=1pt, arc=4pt,
-  left=4pt, right=4pt
-}
-
-\newtcolorbox{warnbox}{
-  colback=warnbg, colframe=red!60!black,
-  boxrule=1pt, arc=4pt,
-  left=4pt, right=4pt
-}
-
-\newtcolorbox{stepbox}[1]{
-  colback=greenbg, colframe=green!50!black,
-  boxrule=1pt, arc=4pt,
-  title={#1},
-  fonttitle=\bfseries,
-  coltitle=green!30!black
-}
-% ──────────────────────────────────────────────────────────────────────────────
-
-% ── Theorem environments ───────────────────────────────────────────────────────
-\theoremstyle{definition}
-\newtheorem{example}{Example}[section]
-
-% ── Math macros ───────────────────────────────────────────────────────────────
-\newcommand{\yhat}{\hat{y}}
-\newcommand{\sigmoid}{\sigma}
-\newcommand{\bx}{\mathbf{x}}
-\newcommand{\bh}{\mathbf{h}}
-\newcommand{\bz}{\mathbf{z}}
-\newcommand{\bW}{\mathbf{W}}
-\newcommand{\bb}{\mathbf{b}}
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
 
 % ── Document ──────────────────────────────────────────────────────────────────
 \begin{document}

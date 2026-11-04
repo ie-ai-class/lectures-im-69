@@ -1,0 +1,30 @@
+% ══════════════════════════════════════════════════════════════════════════════
+% lecturemath.sty — shared math shorthands for the lecture notes
+% ══════════════════════════════════════════════════════════════════════════════
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{lecturemath}[2026/11/04 Math macros for lecture notes]
+
+\RequirePackage{amsmath, amssymb}
+
+% ── Bold vectors / matrices ───────────────────────────────────────────────────
+\newcommand{\bth}{\boldsymbol{\theta}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\bX}{\mathbf{X}}
+\newcommand{\by}{\mathbf{y}}
+\newcommand{\bw}{\mathbf{w}}
+\newcommand{\bW}{\mathbf{W}}
+\newcommand{\bb}{\mathbf{b}}
+\newcommand{\bh}{\mathbf{h}}
+\newcommand{\bz}{\mathbf{z}}
+
+% ── Statistics ───────────────────────────────────────────────────────────────
+\newcommand{\xbar}{\bar{x}}
+\newcommand{\ybar}{\bar{y}}
+\newcommand{\yhat}{\hat{y}}
+
+% ── Functions & operators ────────────────────────────────────────────────────
+\newcommand{\sigmoid}{\sigma}
+\newcommand{\relu}{\mathrm{ReLU}}
+\newcommand{\pd}[2]{\dfrac{\partial #1}{\partial #2}}
+
+\endinput
