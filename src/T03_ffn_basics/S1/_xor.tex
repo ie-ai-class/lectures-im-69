@@ -102,6 +102,9 @@ and $x_2$.  The resulting MSE is:
   non-linear.
 \end{warnbox}
 
+\rimg{img/2026-11-05-20-34-06.png}{XOR dataset with linear regression predictions.  The model predicts 0.5 for all inputs.}
+
+
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Logistic Regression Also Fails}
 
@@ -149,6 +152,8 @@ on the other.
   (cross-entropy loss $= \ln 2 \approx 0.693$ per sample).
 \end{resultbox}
 
+\rimg{img/2026-11-05-21-38-17.png}{Logistic regression decision boundary for the XOR problem. It is not possible to draw a straight line that separates the two classes.}
+
 % ══════════════════════════════════════════════════════════════════════════════
 \section{The Key Insight: Feature Transformation}
 
@@ -171,12 +176,12 @@ four inputs:
   \renewcommand{\arraystretch}{1.2}
   \begin{tabular}{cc|cc|c}
     \toprule
-    $x_1$ & $x_2$ & $h_1$ & $h_2$ & $y$ \\
+    $x_1$ & $x_2$ & $h_1$          & $h_2$          & $y$            \\
     \midrule
-    0     & 0     & 0     & 0     & 0   \\
-    0     & 1     & 1     & 0     & 1   \\
-    1     & 0     & 1     & 0     & 1   \\
-    1     & 1     & 1     & 1     & 0   \\
+    0     & 0     & 0              & 0              & 0              \\
+    0     & 1     & 1              & 0              & 1              \\
+    1     & 0     & \sol[0.5cm]{1} & \sol[0.5cm]{0} & \sol[0.5cm]{1} \\
+    1     & 1     & \sol[0.5cm]{1} & \sol[0.5cm]{1} & \sol[0.5cm]{0} \\
     \bottomrule
   \end{tabular}
 \end{center}
@@ -195,6 +200,10 @@ In the new feature space $(h_1, h_2)$ we need to output 1 when $(h_1, h_2)
   transformation of $(x_1, x_2)$ cannot produce a linearly separable space
   for XOR.
 \end{notebox}
+
+\rimg{img/2026-11-05-21-50-48.png}{Scatter plot of the XOR dataset in the new feature space $(h_1, h_2)$.  Linear regression plane is fitted to the transformed data. The model fits perfectly.}
+
+\rimg{img/2026-11-05-21-31-36.png}{Scatter plot in the new feature space $(h_1, h_2)$.  The logistic regression decision boundary (dashed line) separates the two classes perfectly.}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{A Feedforward Neural Network}

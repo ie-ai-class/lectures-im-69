@@ -36,9 +36,9 @@ function Compile-LaTeXDocument {
     }
 }
 
-Compile-LaTeXDocument -Folder "src/T02_ml_basics/S1" -Stem "_linear_regression"
-Compile-LaTeXDocument -Folder "src/T02_ml_basics/S2" -Stem "_classification"
-# Compile-LaTeXDocument -Folder "src/T03_ffn_basics/S1" -Stem "_xor"
+# Compile-LaTeXDocument -Folder "src/T02_ml_basics/S1" -Stem "_linear_regression"
+# Compile-LaTeXDocument -Folder "src/T02_ml_basics/S2" -Stem "_classification"
+Compile-LaTeXDocument -Folder "src/T03_ffn_basics/S1" -Stem "_xor"
 # Compile-LaTeXDocument -Folder "src/T03_ffn_basics/S2" -Stem "_gradient_descent"
 # Compile-LaTeXDocument -Folder "src/T03_ffn_basics/S3" -Stem "_forward_pass"
 # Compile-LaTeXDocument -Folder "src/T03_ffn_basics/S4" -Stem "_backpropagation"

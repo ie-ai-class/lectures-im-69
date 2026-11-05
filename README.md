@@ -15,7 +15,13 @@
 
 # Machine Learning Basics
 
-| Topic             | Exercise                                                   | Solution                                                    | Resources                                                               |
-| ----------------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Linear Regression | [PDF](/src/T02_ml_basics/S1/linear_regression_student.pdf) | [PDF](/src/T02_ml_basics/S1/linear_regression_solution.pdf) | [Notebook](https://molab.marimo.io/notebooks/nb_msZVS7PcDBEzA6bLpxp9fy) |
-| Classification    | [PDF](/src/T02_ml_basics/S2/classification_student.pdf)    | [PDF](/src/T02_ml_basics/S2/classification_solution.pdf)    | [Notebook](https://molab.marimo.io/notebooks/nb_SaRbrJST1y2w4TgKBHzAas) |
+| Topic             | Exercise                                                   | Solution                                                    | Resources     |
+| ----------------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ------------- |
+| Linear Regression | [PDF](/src/T02_ml_basics/S1/linear_regression_student.pdf) | [PDF](/src/T02_ml_basics/S1/linear_regression_solution.pdf) | [Notebook](#) |
+| Classification    | [PDF](/src/T02_ml_basics/S2/classification_student.pdf)    | [PDF](/src/T02_ml_basics/S2/classification_solution.pdf)    | [Notebook](#) |
+
+# Feedforward Networks Basics
+
+| Topic       | Exercise                                      | Solution                                       | Resources                                                               |
+| ----------- | --------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
+| XOR Problem | [PDF](/src/T03_ffn_basics/S1/xor_student.pdf) | [PDF](/src/T03_ffn_basics/S1/xor_solution.pdf) | [Notebook](https://molab.marimo.io/notebooks/nb_Y91hwHBhyp1nKnWsBzNk2S) |
