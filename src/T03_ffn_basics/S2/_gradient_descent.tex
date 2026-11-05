@@ -54,28 +54,28 @@ Recall that for a function $J(w)$, the derivative $dJ/dw$ measures the
 \emph{slope} of $J$ at the current value of $w$:
 
 \begin{center}
-\renewcommand{\arraystretch}{1.3}
-\begin{tabular}{cl}
-\toprule
-Sign of $dJ/dw$ & Meaning \\
-\midrule
-$> 0$ & $J$ rises as $w$ increases $\;\Rightarrow\;$ \textbf{decrease} $w$ \\
-$< 0$ & $J$ falls as $w$ increases $\;\Rightarrow\;$ \textbf{increase} $w$ \\
-$= 0$ & $J$ is flat here $\;\Rightarrow\;$ we are at a (local) minimum \\
-\bottomrule
-\end{tabular}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{cl}
+    \toprule
+    Sign of $dJ/dw$ & Meaning                                                            \\
+    \midrule
+    $> 0$           & $J$ rises as $w$ increases $\;\Rightarrow\;$ \textbf{decrease} $w$ \\
+    $< 0$           & $J$ falls as $w$ increases $\;\Rightarrow\;$ \textbf{increase} $w$ \\
+    $= 0$           & $J$ is flat here $\;\Rightarrow\;$ we are at a (local) minimum     \\
+    \bottomrule
+  \end{tabular}
 \end{center}
 
 Both non-zero cases are captured by a single rule: subtract a small multiple
 of the gradient from the current weight.
 
 \begin{resultbox}
-\textbf{Gradient Descent Update Rule}
-\[
-  w \;\longleftarrow\; w \;-\; \eta\,\frac{dJ}{dw}
-\]
-where $\eta > 0$ (pronounced ``eta'') is the \textbf{learning rate}: a small
-positive constant controlling the step size.
+  \textbf{Gradient Descent Update Rule}
+  \[
+    w \;\longleftarrow\; w \;-\; \eta\,\frac{dJ}{dw}
+  \]
+  where $\eta > 0$ (pronounced ``eta'') is the \textbf{learning rate}: a small
+  positive constant controlling the step size.
 \end{resultbox}
 
 Applying this update repeatedly is called \textbf{gradient descent} because
@@ -85,16 +85,16 @@ we are literally descending the loss surface step by step.
 \section{A Hand-Calculated Example}
 
 \begin{example}
-\textbf{Setup.}
-One training point: $x = 2$, $y = 4$.
-Model (no bias): $\yhat = wx$.
-Loss:
-\[
-  J(w) = (y - wx)^2 = (4 - 2w)^2.
-\]
-The true weight is clearly $w^{*} = 2$, since $\yhat = 2 \times 2 = 4 = y$.
-We start at $w_0 = 0$ and run gradient descent with learning rate
-$\eta = 0.1$.
+  \textbf{Setup.}
+  One training point: $x = 2$, $y = 4$.
+  Model (no bias): $\yhat = wx$.
+  Loss:
+  \[
+    J(w) = (y - wx)^2 = (4 - 2w)^2.
+  \]
+  The true weight is clearly $w^{*} = 2$, since $\yhat = 2 \times 2 = 4 = y$.
+  We start at $w_0 = 0$ and run gradient descent with learning rate
+  $\eta = 0.1$.
 \end{example}
 
 % ──────────────────────────────────────────────────────────────────────────────
@@ -127,19 +127,19 @@ $\dfrac{dJ}{dw} = -4(4-2w)$ each time:
 
 \vspace{0.5em}
 \begin{center}
-\renewcommand{\arraystretch}{2.0}
-\begin{tabular}{c >{\centering}p{1.4cm} >{\centering}p{2.2cm}
-                  >{\centering}p{4.0cm} p{4.0cm}}
-\toprule
-Step $t$ & $w_t$ & $J(w_t)$ & $dJ/dw$ at $w_t$
-         & $w_{t+1} = w_t - 0.1\,\cdot\,dJ/dw$ \\
-\midrule
-0 & $0$     & \sol[1.6cm]{$16$}    & \sol[3.0cm]{$-4(4-0)=-16$}      & \sol[3.5cm]{$0-0.1(-16)=1.6$} \\
-1 & $1.6$   & \sol[1.6cm]{$0.64$}  & \sol[3.0cm]{$-4(0.8)=-3.2$}     & \sol[3.5cm]{$1.6-0.1(-3.2)=1.92$} \\
-2 & $1.92$  & \sol[1.6cm]{$0.026$} & \sol[3.0cm]{$-4(0.16)=-0.64$}   & \sol[3.5cm]{$1.92-0.1(-0.64)=1.984$} \\
-3 & $1.984$ & \sol[1.6cm]{$0.001$} & \sol[3.0cm]{$-4(0.032)=-0.128$} & \sol[3.5cm]{$1.984-0.1(-0.128)\approx 1.997$} \\
-\bottomrule
-\end{tabular}
+  \renewcommand{\arraystretch}{2.0}
+  \begin{tabular}{c >{\centering}p{1.4cm} >{\centering}p{2.2cm}
+    >{\centering}p{4.0cm} p{4.0cm}}
+    \toprule
+    Step $t$ & $w_t$                               & $J(w_t)$             & $dJ/dw$ at $w_t$
+             & $w_{t+1} = w_t - 0.1\,\cdot\,dJ/dw$                                                                                                          \\
+    \midrule
+    0        & $0$                                 & \sol[1.6cm]{$16$}    & \sol[3.0cm]{$-4(4-0)=-16$}      & \sol[3.5cm]{$0-0.1(-16)=1.6$}                 \\
+    1        & $1.6$                               & \sol[1.6cm]{$0.64$}  & \sol[3.0cm]{$-4(0.8)=-3.2$}     & \sol[3.5cm]{$1.6-0.1(-3.2)=1.92$}             \\
+    2        & $1.92$                              & \sol[1.6cm]{$0.026$} & \sol[3.0cm]{$-4(0.16)=-0.64$}   & \sol[3.5cm]{$1.92-0.1(-0.64)=1.984$}          \\
+    3        & $1.984$                             & \sol[1.6cm]{$0.001$} & \sol[3.0cm]{$-4(0.032)=-0.128$} & \sol[3.5cm]{$1.984-0.1(-0.128)\approx 1.997$} \\
+    \bottomrule
+  \end{tabular}
 \end{center}
 \vspace{0.5em}
 
@@ -152,60 +152,63 @@ become smaller as we approach the minimum.
 \subsection{Visualising the Descent}
 
 \begin{center}
-\begin{tikzpicture}[scale=1.0]
-  % ── Axes ──────────────────────────────────────────────────────────────────
-  \draw[->] (-0.3, 0) -- (3.6, 0) node[right] {$w$};
-  \draw[->] (0, -0.3) -- (0, 3.8) node[above] {$J(w)$};
+  \begin{tikzpicture}[x=4.2cm, y=1.6cm]
+    % ── Axes ──────────────────────────────────────────────────────────────────
+    \draw[->] (-0.08, 0) -- (3.0, 0) node[right] {$w$};
+    \draw[->] (0, -0.2) -- (0, 3.8) node[above] {$J(w)$};
 
-  % ── Parabola: J(w)=(4-2w)^2, plotted as y=(4-2x)^2/5 for x in [-0.1,2.7] ─
-  \draw[thick, mainblue, domain=-0.08:2.65, samples=120]
+    % ── Parabola: J(w)=(4-2w)^2, plotted as y=(4-2x)^2/5 ─────────────────────
+    \draw[thick, mainblue, domain=-0.04:2.85, samples=150]
     plot (\x, {(4 - 2*\x)^2 / 5});
 
-  % ── Minimum marker ────────────────────────────────────────────────────────
-  \draw[dashed, gray!70] (2, 0) -- (2, 0.25);
-  \node[below] at (2, -0.08) {\small $w^*\!=\!2$};
+    % ── Minimum marker ────────────────────────────────────────────────────────
+    \draw[dashed, gray!70] (2, 0) -- (2, 2.2);
+    \node[above, gray!70!black] at (2, 2.2) {\small $w^*\!=\!2$};
 
-  % ── Step points (x = w, y = J/5) ─────────────────────────────────────────
-  % w0=0:    J=16,     y=3.20
-  % w1=1.6:  J=0.64,   y=0.128
-  % w2=1.92: J=0.026,  y≈0.005
-  % w3=1.984:J=0.001,  y≈0.0002
-  \fill[red!80!black]      (0,   3.20)  circle (2.5pt);
-  \fill[orange!80!black]   (1.6, 0.128) circle (2.5pt);
-  \fill[green!60!black]    (1.92,0.005) circle (2.5pt);
-  \fill[green!80!black]    (1.984,0.0002) circle (2pt);
+    % ── Step points (x = w, y = J/5) ─────────────────────────────────────────
+    % w0=0:    J=16,     y=3.20
+    % w1=1.6:  J=0.64,   y=0.128
+    % w2=1.92: J=0.026,  y≈0.005
+    % w3=1.984:J=0.001,  y≈0.0002
+    \fill[red!80!black]      (0,   3.20)  circle (2.5pt);
+    \fill[orange!80!black]   (1.6, 0.128) circle (2.5pt);
+    \fill[green!60!black]    (1.92,0.005) circle (2.5pt);
+    \fill[green!80!black]    (1.984,0.0002) circle (2pt);
 
-  % ── Labels ────────────────────────────────────────────────────────────────
-  \node[right=3pt, red!80!black]    at (0,   3.20)  {\small $w_0\!=\!0$};
-  \node[above right=2pt, orange!80!black] at (1.6, 0.128) {\small $w_1\!=\!1.6$};
-  \node[above=4pt, green!60!black]  at (1.92,0.005) {\small $w_2\!=\!1.92$};
-  \node[above right=2pt]            at (1.984,0.0002){\small $w_3$};
+    % ── Labels (leader lines keep the clustered points readable) ─────────────
+    \node[right=4pt, red!80!black] at (0, 3.20) {\small $w_0\!=\!0$};
+    \draw[orange!80!black, thin] (1.6, 0.128) -- (1.35, 1.0)
+    node[above, orange!80!black] {\small $w_1\!=\!1.6$};
+    \draw[green!60!black, thin] (1.92, 0.005) -- (1.72, 1.6)
+    node[above, green!60!black] {\small $w_2\!=\!1.92$};
+    \draw[green!80!black, thin] (1.984, 0.0002) -- (2.3, 1.0)
+    node[above, green!80!black] {\small $w_3\!=\!1.984$};
 
-  % ── Progress arrows along x-axis ─────────────────────────────────────────
-  \draw[-{Stealth[scale=1.0]}, thick, red!60!black]
-    (0.05, -0.22) -- (1.55, -0.22);
-  \draw[-{Stealth[scale=1.0]}, thick, orange!80!black]
-    (1.65, -0.22) -- (1.87, -0.22);
-  \draw[-{Stealth[scale=0.8]}, thick, green!60!black]
-    (1.925,-0.22) -- (1.975,-0.22);
+    % ── Y-axis ticks ─────────────────────────────────────────────────────────
+    \foreach \jval/\ypos in {4/0.8, 8/1.6, 12/2.4, 16/3.2} {
+        \draw (-0.02, \ypos) -- (0, \ypos)
+        node[left=5pt] {\small \jval};
+      }
 
-  % ── Y-axis ticks ─────────────────────────────────────────────────────────
-  \foreach \jval/\ypos in {4/0.8, 8/1.6, 12/2.4, 16/3.2} {
-    \draw (-0.06, \ypos) -- (0, \ypos)
-      node[left=2pt] {\small \jval};
-  }
+    % ── X-axis ticks ─────────────────────────────────────────────────────────
+    \foreach \xval in {0.5, 1.0, 1.5, 2.0, 2.5} {
+        \draw (\xval, 0.04) -- (\xval, -0.04)
+        node[below] {\small \xval};
+      }
 
-  % ── X-axis ticks ─────────────────────────────────────────────────────────
-  \foreach \xval in {0.5, 1.0, 1.5, 2.0, 2.5} {
-    \draw (\xval, 0.05) -- (\xval, -0.05)
-      node[below] {\small \xval};
-  }
-\end{tikzpicture}
+    % ── Progress arrows (below the tick labels) ──────────────────────────────
+    \draw[-{Stealth[scale=1.0]}, thick, red!60!black]
+    (0.02, -0.5) -- (1.58, -0.5);
+    \draw[-{Stealth[scale=1.0]}, thick, orange!80!black]
+    (1.62, -0.5) -- (1.90, -0.5);
+    \draw[-{Stealth[scale=0.8]}, thick, green!60!black]
+    (1.93, -0.5) -- (1.98, -0.5);
+  \end{tikzpicture}
 \end{center}
 
 The dots show the position of $w_t$ on the loss curve at each step.
 Each step is smaller than the last because the gradient --- and hence the
-slope of the curve --- becomes flatter as we near the bottom.
+slope of the curve --- becomes flatter as we near the bottom.  Also check out the interactive visualization at \href{https://algomaster.io/animations/ai-ml/ml-gradient-descent}{LINK}.
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{The Learning Rate $\eta$}
@@ -246,9 +249,9 @@ The loss is now \emph{larger} than it was at $w_0 = 0$, and the updates
 will keep growing.  The algorithm \textbf{diverges}.
 
 \begin{warnbox}
-\textbf{Symptom of a bad learning rate:} if $J$ increases during training,
-$\eta$ is almost certainly too large.  A safe starting point for most
-problems is $\eta = 0.01$.
+  \textbf{Symptom of a bad learning rate:} if $J$ increases during training,
+  $\eta$ is almost certainly too large.  A safe starting point for most
+  problems is $\eta = 0.01$.
 \end{warnbox}
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -275,13 +278,13 @@ layers of non-linear activation functions --- these gradients are not
 obvious to write down.
 
 \begin{notebox}
-\textbf{Coming next.}
-In Section 3.3 we build a concrete two-layer network and trace a prediction
-step by step (the \emph{forward pass}).  In Section 3.4 we derive the
-gradients by working backwards through the same network
-(the \emph{backward pass}, or \textbf{backpropagation}).
-Only then will we have everything needed to run gradient descent on a
-neural network.
+  \textbf{Coming next.}
+  In Section 3.3 we build a concrete two-layer network and trace a prediction
+  step by step (the \emph{forward pass}).  In Section 3.4 we derive the
+  gradients by working backwards through the same network
+  (the \emph{backward pass}, or \textbf{backpropagation}).
+  Only then will we have everything needed to run gradient descent on a
+  neural network.
 \end{notebox}
 
 \end{document}
