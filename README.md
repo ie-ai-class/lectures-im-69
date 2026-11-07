@@ -6,7 +6,7 @@
 
 # Lecture VDO Playlist
 
-- [AI-IM Class 2569](#)
+- [AI-IM Class 2569](https://youtube.com/playlist?list=PLW3i8Y6gZ2uE&si=9M8LOXm5Q1AD91Y5)
 
 # Introduction
 
