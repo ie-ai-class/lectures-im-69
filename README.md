@@ -15,10 +15,10 @@
 
 # Machine Learning Basics
 
-| Topic             | Exercise                                                   | Solution                                                    | Resources                                                               |
-| ----------------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Linear Regression | [PDF](/src/T02_ml_basics/S1/linear_regression_student.pdf) | [PDF](/src/T02_ml_basics/S1/linear_regression_solution.pdf) | [Notebook](https://molab.marimo.io/notebooks/nb_t3HUA86DUweuqaghGDzNpD) |
-| Classification    | [PDF](/src/T02_ml_basics/S2/classification_student.pdf)    | [PDF](/src/T02_ml_basics/S2/classification_solution.pdf)    | [Notebook](https://molab.marimo.io/notebooks/nb_hyZS5VFhbSZpqandss5VCw) |
+| Topic             | Exercise                                                   | Solution                                                    | Resources                                                               | Lecture                                |
+| ----------------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------- |
+| Linear Regression | [PDF](/src/T02_ml_basics/S1/linear_regression_student.pdf) | [PDF](/src/T02_ml_basics/S1/linear_regression_solution.pdf) | [Notebook](https://molab.marimo.io/notebooks/nb_t3HUA86DUweuqaghGDzNpD) | [PDF](./lectures/T02_ml_basics/S1.pdf) |
+| Classification    | [PDF](/src/T02_ml_basics/S2/classification_student.pdf)    | [PDF](/src/T02_ml_basics/S2/classification_solution.pdf)    | [Notebook](https://molab.marimo.io/notebooks/nb_hyZS5VFhbSZpqandss5VCw) |                                        |
 
 # Feedforward Networks Basics
 
