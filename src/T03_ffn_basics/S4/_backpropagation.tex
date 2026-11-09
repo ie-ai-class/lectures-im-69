@@ -14,7 +14,7 @@
 \begin{center}
   {\LARGE \textbf{Section 3.4: Backpropagation}} \\[0.3em]
   {\large\itshape Computing Gradients with the Chain Rule} \\[0.5em]
-  {\large AI Class --- Lecture Notes}%
+  {\large AI-IM Class --- Lecture Notes}%
   \ifstudentmode
     \quad {\normalsize\color{gray}[Student Copy]}%
   \fi
@@ -27,7 +27,7 @@
 % ══════════════════════════════════════════════════════════════════════════════
 \section{The Goal}
 
-From Section 3.2 (Gradient Descent), we know that to update a weight $w$
+From Section 3.2 (Gradient Descent), we know that to update a weight (and bias) $w$
 we need its gradient:
 \[
   w \;\longleftarrow\; w - \eta \,\pd{J}{w}.
@@ -37,7 +37,7 @@ From Section 3.3 (Forward Pass) we computed a prediction $\yhat = 0.637$
 and a loss $J = 0.132$ for the input $(x_1, x_2) = (0, 1)$.
 
 \textbf{Now we need $\partial J / \partial w$ for every weight in the
-network.}
+  network.}
 The difficulty is that the loss depends on a weight only \emph{indirectly}:
 $w \to z \to h \to \cdots \to \yhat \to J$.
 Each arrow is a function, and we need to differentiate through all of them.
@@ -60,88 +60,238 @@ For three nested functions $y = f(g(h(x)))$, let $v = h(x)$ and $u = g(v)$:
 \]
 
 \begin{example}
-Let $y = (2x+1)^2$.  Write $u = 2x+1$ so that $y = u^2$:
-\[
-  \frac{dy}{dx}
-  = \underbrace{\frac{dy}{du}}_{2u}
+  Let $y = (2x+1)^2$.  Write $u = 2x+1$ so that $y = u^2$:
+  \[
+    \frac{dy}{dx}
+    = \underbrace{\frac{dy}{du}}_{2u}
     \cdot
     \underbrace{\frac{du}{dx}}_{2}
-  = 2(2x+1) \cdot 2
-  = \sol[4cm]{4(2x+1)}.
-\]
+    = 2(2x+1) \cdot 2
+    = \sol[4cm]{4(2x+1)}.
+  \]
 \end{example}
 
 \begin{notebox}
-Backpropagation is simply the chain rule applied \emph{backwards} through
-the network --- one layer at a time.  We start from $\partial J/\partial
-\yhat$ (easy to compute) and work leftward, accumulating the product at
-each layer.
+  Backpropagation is simply the chain rule applied \emph{backwards} through
+  the network --- one layer at a time.  We start from $\partial J/\partial
+    \yhat$ (easy to compute) and work leftward, accumulating the product at
+  each layer.
 \end{notebox}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{What We Know from Section 3.3}
+The network has the following (current) parameters:
+\[
+  \bW^{(1)} = \begin{bmatrix} 0.5 & -0.5 \\ 0.5 & \phantom{-}0.5 \end{bmatrix},
+  \quad
+  \bb^{(1)} = \begin{bmatrix} 0.5 \\ 0.0 \end{bmatrix},
+  \quad
+  \bW^{(2)} = \begin{bmatrix} 0.5 & 0.5 \end{bmatrix},
+  \quad
+  b^{(2)} = 0.0.
+\]
 
-We carry forward every value computed in the forward pass:
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      neuron/.style={circle, draw=mainblue, fill=boxbg,
+          minimum size=1.1cm, thick, font=\small},
+      preact/.style={circle, draw=mainblue, fill=white,
+          minimum size=1.1cm, thick, font=\small},
+      input/.style={circle, draw=gray!60, fill=gray!15,
+          minimum size=1.1cm, thick, font=\small},
+      unitbox/.style={draw=gray!60, dashed, rounded corners=6pt},
+      >=Stealth, node distance=0pt
+    ]
+    % ── Nodes ──────────────────────────────────────────────────────────────────
+    \node[input]   (x1) at (0,    1.4) {$x_1$};
+    \node[input]   (x2) at (0,   -1.4) {$x_2$};
+
+    \node[preact]  (z1) at (3.6,  1.4) {$z^{(1)}_1$};
+    \node[neuron]  (h1) at (5.6,  1.4) {$h_1$};
+    \node[preact]  (z2) at (3.6, -1.4) {$z^{(1)}_2$};
+    \node[neuron]  (h2) at (5.6, -1.4) {$h_2$};
+
+    \node[preact]  (zo) at (9.2,  0)   {$z^{(2)}$};
+    \node[neuron]  (yh) at (11.2, 0)   {$\yhat$};
+
+    % ── Dashed boxes: one box = one neuron ─────────────────────────────────────
+    \draw[unitbox] (2.85,  0.65) rectangle (6.35,  2.15);
+    \draw[unitbox] (2.85, -2.15) rectangle (6.35, -0.65);
+    \draw[unitbox] (8.45, -0.75) rectangle (11.95, 0.75);
+
+    % ── Connections: input → hidden pre-activations ────────────────────────────
+    \draw[->, thick] (x1) -- node[above, font=\scriptsize, pos=0.5]
+    {$w^{(1)}_{11}$} (z1);
+    \draw[->, thick] (x1) -- node[sloped, above, font=\scriptsize, pos=0.28]
+    {$w^{(1)}_{21}$} (z2);
+    \draw[->, thick] (x2) -- node[sloped, below, font=\scriptsize, pos=0.28]
+    {$w^{(1)}_{12}$} (z1);
+    \draw[->, thick] (x2) -- node[below, font=\scriptsize, pos=0.5]
+    {$w^{(1)}_{22}$} (z2);
+
+    % ── Activation arrows z → h ────────────────────────────────────────────────
+    \draw[->, thick, mainblue] (z1) -- node[above, font=\small] {$\sigmoid$} (h1);
+    \draw[->, thick, mainblue] (z2) -- node[above, font=\small] {$\sigmoid$} (h2);
+    \draw[->, thick, mainblue] (zo) -- node[above, font=\small] {$\sigmoid$} (yh);
+
+    % ── Connections: hidden → output pre-activation ────────────────────────────
+    \draw[->, thick] (h1) -- node[above right, font=\scriptsize, pos=0.45]
+    {$w^{(2)}_1$} (zo);
+    \draw[->, thick] (h2) -- node[below right, font=\scriptsize, pos=0.45]
+    {$w^{(2)}_2$} (zo);
+
+    % ── Bias annotations ───────────────────────────────────────────────────────
+    \node[font=\scriptsize, gray!80!black] at (3.6,  2.45) {$+\,b^{(1)}_1$};
+    \node[font=\scriptsize, gray!80!black] at (3.6, -2.45) {$+\,b^{(1)}_2$};
+    \node[font=\scriptsize, gray!80!black] at (9.2,  1.05) {$+\,b^{(2)}$};
+
+    % ── Layer labels ───────────────────────────────────────────────────────────
+    \node[font=\small\itshape, gray] at (0,    3.1) {Input layer};
+    \node[font=\small\itshape, gray] at (4.6,  3.1) {Hidden layer};
+    \node[font=\small\itshape, gray] at (10.2, 3.1) {Output layer};
+    \node[font=\small\itshape, gray] at (13.6, 3.1) {Loss};
+
+    % ── Loss node and target ───────────────────────────────────────────────────
+    \node[circle, draw=red!70!black, fill=warnbg, minimum size=1.1cm,
+      thick, font=\small] (J) at (13.6, 0) {$J$};
+    \node[input] (y) at (13.6, -2.0) {$y$};
+    \draw[->, thick, red!70!black] (yh) -- (J);
+    \draw[->, thick, red!70!black] (y)  -- (J);
+    \node[font=\scriptsize, red!70!black] at (13.6, 0.95) {$J = (y - \yhat)^2$};
+    \node[font=\scriptsize, gray!80!black, left=0.1cm of y] {target};
+  \end{tikzpicture}
+  \caption{The complete forward pass.}
+  \label{fig:forward-pass-z-with-loss}
+\end{figure}
 
 \begin{center}
-\renewcommand{\arraystretch}{1.3}
-\begin{tabular}{llr}
-\toprule
-Symbol & Meaning & Value \\
-\midrule
-$x_1,\, x_2$ & inputs & $0,\;\; 1$ \\
-$z^{(1)}_1,\; z^{(1)}_2$ & hidden pre-activations & $0.0,\;\; 0.5$ \\
-$h_1,\; h_2$ & hidden activations & $0.500,\;\; 0.622$ \\
-$z^{(2)}$ & output pre-activation & $0.561$ \\
-$\yhat$ & prediction & $0.637$ \\
-$y$ & target & $1$ \\
-$J = (y-\yhat)^2$ & loss & $0.132$ \\
-\bottomrule
-\end{tabular}
+  \renewcommand{\arraystretch}{1.4}
+  \begin{tabular}{lll}
+    \toprule
+    Quantity                & Symbol         & Value      \\
+    \midrule
+    Input                   & $(x_1,\, x_2)$ & $(0,\; 1)$ \\
+    Target                  & $y$            & $1$        \\
+    \midrule
+    Hidden pre-activation 1 & $z^{(1)}_1$    & $0.0$      \\
+    Hidden pre-activation 2 & $z^{(1)}_2$    & $0.5$      \\
+    Hidden activation 1     & $h_1$          & $0.500$    \\
+    Hidden activation 2     & $h_2$          & $0.622$    \\
+    \midrule
+    Output pre-activation   & $z^{(2)}$      & $0.561$    \\
+    Prediction              & $\yhat$        & $0.637$    \\
+    \midrule
+    Loss                    & $J$            & $0.132$    \\
+    \bottomrule
+  \end{tabular}
 \end{center}
 
-We also need the sigmoid derivatives $\sigmoid'(z) = \sigmoid(z)(1-\sigmoid(z))$
-at the values we computed:
 
-\begin{center}
-\renewcommand{\arraystretch}{1.3}
-\begin{tabular}{lll}
-\toprule
-Location & $z$ & $\sigmoid'(z)$ \\
-\midrule
-$z^{(1)}_1 = 0.0$ & $\to$ & $0.500 \times 0.500 = 0.250$ \\
-$z^{(1)}_2 = 0.5$ & $\to$ & $0.622 \times 0.378 \approx 0.235$ \\
-$z^{(2)} \approx 0.561$ & $\to$ & $0.637 \times 0.363 \approx 0.231$ \\
-\bottomrule
-\end{tabular}
-\end{center}
+\begin{notebox}
+  We also need the sigmoid derivatives $\sigmoid'(z) = \sigmoid(z)(1-\sigmoid(z))$
+  at the values we computed.  We can use Python to evaluate them:
+
+\end{notebox}
+\begin{codebox}
+def sigmoid_p(x): # derivative of sigmoid
+    s = sigmoid(x)
+    return s * (1 - s)
+\end{codebox}
+
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Backward Pass: Output Layer}
 
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      neuron/.style={circle, draw=mainblue, fill=boxbg,
+          minimum size=1.1cm, thick, font=\small},
+      preact/.style={circle, draw=mainblue, fill=white,
+          minimum size=1.1cm, thick, font=\small},
+      input/.style={circle, draw=gray!60, fill=gray!15,
+          minimum size=1.1cm, thick, font=\small},
+      param/.style={rectangle, rounded corners=3pt, draw=orange!80!black,
+          fill=notebg, thick, minimum size=0.75cm, font=\small},
+      unitbox/.style={draw=gray!60, dashed, rounded corners=6pt},
+      >=Stealth, node distance=0pt
+    ]
+    % ── Nodes ──────────────────────────────────────────────────────────────────
+    \node[preact]  (zo) at (9.2,  0)   {$z^{(2)}$};
+    \node[neuron]  (yh) at (11.2, 0)   {$\yhat$};
+    \node[circle, draw=red!70!black, fill=warnbg, minimum size=1.1cm,
+      thick, font=\small] (J) at (13.6, 0) {$J$};
+    \node[input] (y) at (13.6, -2.0) {$y$};
+
+    % ── Output neuron box ──────────────────────────────────────────────────────
+    \draw[unitbox] (8.45, -0.75) rectangle (11.95, 0.75);
+
+    % ── Incoming arrows from the hidden layer (h nodes omitted) ────────────────
+    \draw[->, thick] (5.6,  1.4) -- (zo);
+    \draw[->, thick] (5.6, -1.4) -- (zo);
+
+    % ── Parameters of the output neuron, linked to z by dotted lines ──────────
+    \node[param] (w1) at (6.9,  2.3) {$w^{(2)}_1$};
+    \node[param] (w2) at (6.9, -2.3) {$w^{(2)}_2$};
+    \node[param] (b2) at (9.2,  2.3) {$b^{(2)}$};
+    \draw[dotted, very thick, orange!80!black] (w1) -- (zo);
+    \draw[dotted, very thick, orange!80!black] (w2) -- (zo);
+    \draw[dotted, very thick, orange!80!black] (b2) -- (zo);
+
+    % ── Forward arrows ─────────────────────────────────────────────────────────
+    \draw[->, thick, mainblue] (zo) -- node[above, font=\small] {$\sigmoid$} (yh);
+    \draw[->, thick, red!70!black] (yh) -- (J);
+    \draw[->, thick, red!70!black] (y)  -- (J);
+    \node[font=\scriptsize, red!70!black] at (13.6, 0.95) {$J = (y - \yhat)^2$};
+    \node[font=\scriptsize, gray!80!black, left=0.1cm of y] {target};
+
+    % ── Backward (chain-rule) arrows ───────────────────────────────────────────
+    \draw[->, thick, red!70!black, dashed] (J.south west) to[bend left=35]
+    node[below, font=\scriptsize] {$\pd{J}{\yhat}$} (yh.south east);
+    \draw[->, thick, red!70!black, dashed] (yh.south west) to[bend left=35]
+    node[below, font=\scriptsize] {$\pd{\yhat}{z^{(2)}}$} (zo.south east);
+  \end{tikzpicture}
+  \caption{Zooming in on the output neuron.  The dotted lines show that
+    $w^{(2)}_1$, $w^{(2)}_2$ and $b^{(2)}$ affect the loss only through
+    $z^{(2)}$, so each gradient is the chain
+    $J \to \yhat \to z^{(2)} \to$ parameter.}
+  \label{fig:output-chain}
+\end{figure}
+
+
 We work right to left through the computation graph:
 
-\[
+\begin{align*}
   J \;\xleftarrow{\partial J/\partial \yhat}\;
   \yhat \;\xleftarrow{\partial \yhat/\partial z^{(2)}}\;
-  z^{(2)} \;\xleftarrow{\partial z^{(2)}/\partial w^{(2)}}\;
-  w^{(2)}.
-\]
+  z^{(2)} & \;\xleftarrow{\partial z^{(2)}/\partial w^{(2)}_j}\;
+  w^{(2)}_j \qquad (j = 1, 2)                                    \\[0.4em]
+  J \;\xleftarrow{\partial J/\partial \yhat}\;
+  \yhat \;\xleftarrow{\partial \yhat/\partial z^{(2)}}\;
+  z^{(2)} & \;\xleftarrow{\partial z^{(2)}/\partial b^{(2)}}\;
+  b^{(2)}
+\end{align*}
+
+The output neuron has three parameters: two weights $w^{(2)}_1, w^{(2)}_2$
+and one bias $b^{(2)}$.  All three reach $J$ through $z^{(2)}$
+(see Figure~\ref{fig:output-chain}), so their chains share the first two
+links and differ only in the last.
 
 % ──────────────────────────────────────────────────────────────────────────────
 \begin{stepbox}{Step 1 \quad Gradient of the loss with respect to $\yhat$}
 
-\[
-  J = (y - \yhat)^2
-  \implies
-  \pd{J}{\yhat}
-  = 2(\yhat - y)
-  = 2(0.637 - 1)
-  = \sol[3cm]{-0.726}
-\]
+  \[
+    J = (y - \yhat)^2
+    \implies
+    \pd{J}{\yhat}
+    = 2(\yhat - y)
+    = 2(0.637 - 1)
+    = \sol[3cm]{-0.726}
+  \]
 
-The negative sign means: increasing $\yhat$ would \emph{decrease} $J$.
-Since $\yhat < y$, the network is predicting too low.
+  The negative sign means: increasing $\yhat$ would \emph{decrease} $J$.
+  Since $\yhat < y$, the network is predicting too low.
 \end{stepbox}
 
 \vspace{0.8em}
@@ -149,117 +299,290 @@ Since $\yhat < y$, the network is predicting too low.
 % ──────────────────────────────────────────────────────────────────────────────
 \begin{stepbox}{Step 2 \quad Gradient through the output sigmoid}
 
-\[
-  \yhat = \sigmoid(z^{(2)})
-  \implies
-  \pd{\yhat}{z^{(2)}}
-  = \sigmoid'(z^{(2)})
-  = \yhat(1-\yhat)
-  = 0.637 \times 0.363
-  \approx \sol[3cm]{0.231}
-\]
+  \[
+    \yhat = \sigmoid(z^{(2)})
+    \implies
+    \pd{\yhat}{z^{(2)}}
+    = \sigmoid'(z^{(2)})
+    = \yhat(1-\yhat)
+    = 0.637 \times 0.363
+    \approx \sol[3cm]{0.231}
+  \]
 
-By the chain rule, the gradient arriving at $z^{(2)}$ is:
+  By the chain rule, the gradient arriving at $z^{(2)}$ is:
 
-\[
-  \pd{J}{z^{(2)}}
-  = \pd{J}{\yhat} \cdot \pd{\yhat}{z^{(2)}}
-  = (-0.726)(0.231)
-  \approx \sol[3cm]{-0.168}
-\]
+  \[
+    \pd{J}{z^{(2)}}
+    = \pd{J}{\yhat} \cdot \pd{\yhat}{z^{(2)}}
+    = (-0.726)(0.231)
+    \approx \sol[3cm]{-0.168}
+  \]
 
-We will call this quantity $\delta^{(2)} = -0.168$.
-It is the \textbf{error signal} at the output neuron: how much the loss
-changes per unit change in $z^{(2)}$.
+  We will call this quantity $\delta^{(2)} = -0.168$.
+  It is the \textbf{error signal} at the output neuron: how much the loss
+  changes per unit change in $z^{(2)}$.
 \end{stepbox}
 
 \vspace{0.8em}
 
 % ──────────────────────────────────────────────────────────────────────────────
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      preact/.style={circle, draw=mainblue, fill=white,
+          minimum size=1.1cm, thick, font=\small},
+      param/.style={rectangle, rounded corners=3pt, draw=orange!80!black,
+          fill=notebg, thick, minimum size=0.75cm, font=\small},
+      linklabel/.style={font=\small, orange!60!black},
+      >=Stealth
+    ]
+    % ── Output pre-activation ──────────────────────────────────────────────────
+    \node[preact] (zo) at (6, 0) {$z^{(2)}$};
+
+    % ── Incoming activations (no h nodes, just labelled tails) ────────────────
+    \draw[->, thick] (1.8,  0.9) node[left, font=\small] {$h_1$} -- (zo);
+    \draw[->, thick] (1.8, -0.9) node[left, font=\small] {$h_2$} -- (zo);
+
+    % ── Parameters and their local derivatives ─────────────────────────────────
+    \node[param] (w1) at (3.0,  3.0) {$w^{(2)}_1$};
+    \node[param] (w2) at (3.0, -3.0) {$w^{(2)}_2$};
+    \node[param] (b2) at (6.0,  3.0) {$b^{(2)}$};
+    \draw[dotted, very thick, orange!80!black] (w1) --
+    node[linklabel, above right, pos=0.45] {$\pd{z^{(2)}}{w^{(2)}_1}$} (zo);
+    \draw[dotted, very thick, orange!80!black] (w2) --
+    node[linklabel, below right, pos=0.45] {$\pd{z^{(2)}}{w^{(2)}_2}$} (zo);
+    \draw[dotted, very thick, orange!80!black] (b2) --
+    node[linklabel, right, pos=0.5, xshift=2pt] {$\pd{z^{(2)}}{b^{(2)}}$} (zo);
+
+    % ── Error signal arriving from the right (Steps 1–2 collapsed) ─────────────
+    \draw[->, thick, red!70!black, dashed] (11.4, 0) --
+    node[above, font=\small] {$\delta^{(2)} = \pd{J}{z^{(2)}}$}
+    node[below, font=\scriptsize, gray!80!black, yshift=-2pt]
+      {from $\yhat$ and $J$ (Steps 1--2)} (zo);
+  \end{tikzpicture}
+  \caption{After Steps 1--2, everything to the right of $z^{(2)}$ collapses
+    into the error signal $\delta^{(2)}$.  Each parameter's gradient is
+    $\delta^{(2)}$ times the label on its link.}
+  \label{fig:output-local}
+\end{figure}
+
 \begin{stepbox}{Step 3 \quad Gradients for the output weights}
 
-Because $z^{(2)} = w^{(2)}_1 h_1 + w^{(2)}_2 h_2 + b^{(2)}$, we have:
-\[
-  \pd{z^{(2)}}{w^{(2)}_1} = h_1, \qquad
-  \pd{z^{(2)}}{w^{(2)}_2} = h_2, \qquad
-  \pd{z^{(2)}}{b^{(2)}} = 1.
-\]
+  Because $z^{(2)} = w^{(2)}_1 h_1 + w^{(2)}_2 h_2 + b^{(2)}$, we have:
+  \[
+    \pd{z^{(2)}}{w^{(2)}_1} = h_1, \qquad
+    \pd{z^{(2)}}{w^{(2)}_2} = h_2, \qquad
+    \pd{z^{(2)}}{b^{(2)}} = 1.
+  \]
 
-Applying the chain rule one more time:
+  Applying the chain rule one more time:
 
-\begin{align*}
-  \pd{J}{w^{(2)}_1}
-    &= \delta^{(2)} \cdot h_1
-     = (-0.168)(0.500)
-     = \sol[3cm]{-0.084} \\[6pt]
-  \pd{J}{w^{(2)}_2}
-    &= \delta^{(2)} \cdot h_2
-     = (-0.168)(0.622)
-     \approx \sol[3cm]{-0.105} \\[6pt]
-  \pd{J}{b^{(2)}}
-    &= \delta^{(2)} \cdot 1
-     = \sol[3cm]{-0.168}
-\end{align*}
+  \begin{align*}
+    \pd{J}{w^{(2)}_1}
+     & = \delta^{(2)} \cdot h_1
+    = (-0.168)(0.500)
+    = \sol[3cm]{-0.084}         \\[6pt]
+    \pd{J}{w^{(2)}_2}
+     & = \delta^{(2)} \cdot h_2
+    = (-0.168)(0.622)
+    \approx \sol[3cm]{-0.105}   \\[6pt]
+    \pd{J}{b^{(2)}}
+     & = \delta^{(2)} \cdot 1
+    = \sol[3cm]{-0.168}
+  \end{align*}
 \end{stepbox}
 
 \vspace{0.5em}
 
 \begin{notebox}
-\textbf{Pattern observed.}
-For any output weight $w^{(2)}_i$, the gradient is:
-\[
-  \pd{J}{w^{(2)}_i} = \delta^{(2)} \cdot h_i
-  \qquad \text{(error signal} \times \text{incoming activation)}.
-\]
-This pattern repeats at every layer.
+  \textbf{Pattern observed.}
+  For any output weight $w^{(2)}_i$, the gradient is:
+  \[
+    \pd{J}{w^{(2)}_i} = \delta^{(2)} \cdot h_i
+    \qquad \text{(error signal} \times \text{incoming activation)}.
+  \]
+  This pattern repeats at every layer.
 \end{notebox}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Backward Pass: Hidden Layer}
 
-To update $\bW^{(1)}$ we need $\partial J / \partial w^{(1)}_{ij}$.
-The chain from $w^{(1)}_{ij}$ to $J$ goes:
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      neuron/.style={circle, draw=mainblue, fill=boxbg,
+          minimum size=1.1cm, thick, font=\small},
+      preact/.style={circle, draw=mainblue, fill=white,
+          minimum size=1.1cm, thick, font=\small},
+      linklabel/.style={font=\small, orange!60!black},
+      deltalabel/.style={font=\small, red!70!black},
+      >=Stealth
+    ]
+    % ── Nodes ──────────────────────────────────────────────────────────────────
+    \node[preact] (z1) at (2.4,  1.7) {$z^{(1)}_1$};
+    \node[neuron] (h1) at (5.6,  1.7) {$h_1$};
+    \node[preact] (z2) at (2.4, -1.7) {$z^{(1)}_2$};
+    \node[neuron] (h2) at (5.6, -1.7) {$h_2$};
+    \node[preact] (zo) at (10.0, 0)   {$z^{(2)}$};
 
-\[
-  w^{(1)}_{ij}
-  \;\to\; z^{(1)}_i
-  \;\to\; h_i
-  \;\to\; z^{(2)}
-  \;\to\; \yhat
-  \;\to\; J.
-\]
+    % ── Input stubs into the hidden pre-activations (no x nodes) ───────────────
+    \draw[->, thick] (0.6,  2.3) -- (z1);
+    \draw[->, thick] (0.6,  1.1) -- (z1);
+    \draw[->, thick] (0.6, -1.1) -- (z2);
+    \draw[->, thick] (0.6, -2.3) -- (z2);
+
+    % ── Activation arrows z → h: σ outside, local derivative inside ────────────
+    \draw[->, thick, mainblue] (z1) --
+    node[above, font=\small] {$\sigmoid$}
+    node[linklabel, below] {$\pd{h_1}{z^{(1)}_1}$} (h1);
+    \draw[->, thick, mainblue] (z2) --
+    node[below, font=\small] {$\sigmoid$}
+    node[linklabel, above] {$\pd{h_2}{z^{(1)}_2}$} (h2);
+
+    % ── Hidden → output: local derivative outside, weight inside ───────────────
+    \draw[->, thick] (h1) --
+    node[linklabel, above right, pos=0.45] {$\pd{z^{(2)}}{h_1}$}
+    node[below left, font=\small, pos=0.5] {$w^{(2)}_1$} (zo);
+    \draw[->, thick] (h2) --
+    node[linklabel, below right, pos=0.45] {$\pd{z^{(2)}}{h_2}$}
+    node[above left, font=\small, pos=0.5] {$w^{(2)}_2$} (zo);
+
+    % ── Error signal arriving from the right (Steps 1–2) ───────────────────────
+    \draw[->, thick, red!70!black, dashed] (13.4, 0) --
+    node[above, font=\small] {$\delta^{(2)} = \pd{J}{z^{(2)}}$}
+    node[below, font=\scriptsize, gray!80!black, yshift=-2pt]
+      {from $\yhat$ and $J$} (zo);
+
+    % ── Destinations: hidden error signals ─────────────────────────────────────
+    \node[deltalabel, above=0.15cm of z1]
+    {$\delta^{(1)}_1 = \pd{J}{z^{(1)}_1}$};
+    \node[deltalabel, below=0.15cm of z2]
+    {$\delta^{(1)}_2 = \pd{J}{z^{(1)}_2}$};
+  \end{tikzpicture}
+  \caption{The error signal $\delta^{(2)}$ flows backwards through each
+    hidden unit.  Multiplying the labels along a path gives
+    $\delta^{(1)}_i = \delta^{(2)} \cdot \frac{\partial z^{(2)}}{\partial h_i}
+      \cdot \frac{\partial h_i}{\partial z^{(1)}_i}$.}
+  \label{fig:hidden-chain}
+\end{figure}
+
+To update $\bW^{(1)}$ and $\bb^{(1)}$ we need
+$\partial J / \partial w^{(1)}_{ij}$ and $\partial J / \partial b^{(1)}_i$.
+Working right to left, the chains are:
+
+\begin{align*}
+  J \;\xleftarrow{\partial J/\partial \yhat}\;
+  \yhat \;\xleftarrow{\partial \yhat/\partial z^{(2)}}\;
+  z^{(2)} \;\xleftarrow{\partial z^{(2)}/\partial h_i}\;
+  h_i \;\xleftarrow{\partial h_i/\partial z^{(1)}_i}\;
+  z^{(1)}_i & \;\xleftarrow{\partial z^{(1)}_i/\partial w^{(1)}_{ij}}\;
+  w^{(1)}_{ij}                                                          \\[0.4em]
+  J \;\xleftarrow{\partial J/\partial \yhat}\;
+  \yhat \;\xleftarrow{\partial \yhat/\partial z^{(2)}}\;
+  z^{(2)} \;\xleftarrow{\partial z^{(2)}/\partial h_i}\;
+  h_i \;\xleftarrow{\partial h_i/\partial z^{(1)}_i}\;
+  z^{(1)}_i & \;\xleftarrow{\partial z^{(1)}_i/\partial b^{(1)}_i}\;
+  b^{(1)}_i
+\end{align*}
+
+As in the output layer, the weight and bias chains share every link except
+the last.
 
 We already know $\delta^{(2)} = \partial J / \partial z^{(2)} = -0.168$.
 The chain rule gives the error signal at hidden unit $i$:
 
 % ──────────────────────────────────────────────────────────────────────────────
 \begin{patternbox}
-\textbf{Error signal at hidden unit $i$:}
-\[
-  \delta^{(1)}_i
-  \;=\; \pd{J}{z^{(1)}_i}
-  \;=\; \delta^{(2)}
-        \cdot w^{(2)}_i
-        \cdot \sigmoid'\!\left(z^{(1)}_i\right).
-\]
+  \textbf{Error signal at hidden unit $i$:}
+  \[
+    \delta^{(1)}_i
+    \;=\; \pd{J}{z^{(1)}_i}
+    \;=\; \delta^{(2)}
+    \cdot w^{(2)}_i
+    \cdot \sigmoid'\!\left(z^{(1)}_i\right).
+  \]
 
-Three factors multiplied together:
-\begin{enumerate}[nosep]
-  \item $\delta^{(2)}$: error signal from the layer ahead.
-  \item $w^{(2)}_i$: how strongly $h_i$ connects to the output.
-  \item $\sigmoid'(z^{(1)}_i)$: how sensitive $h_i$ is to its own
-        pre-activation.
-\end{enumerate}
+  Three factors multiplied together:
+  \begin{enumerate}[nosep]
+    \item $\delta^{(2)}$: error signal from the layer ahead.
+    \item $w^{(2)}_i$: how strongly $h_i$ connects to the output.
+    \item $\sigmoid'(z^{(1)}_i)$: how sensitive $h_i$ is to its own
+          pre-activation.
+  \end{enumerate}
 
-Once $\delta^{(1)}_i$ is known, the weight gradients follow the same rule
-as before:
-\[
-  \pd{J}{w^{(1)}_{ij}} = \delta^{(1)}_i \cdot x_j, \qquad
-  \pd{J}{b^{(1)}_i}    = \delta^{(1)}_i.
-\]
+  Once $\delta^{(1)}_i$ is known, the weight gradients follow the same rule
+  as before:
+  \[
+    \pd{J}{w^{(1)}_{ij}} = \delta^{(1)}_i \cdot x_j, \qquad
+    \pd{J}{b^{(1)}_i}    = \delta^{(1)}_i.
+  \]
 \end{patternbox}
 
 \vspace{0.8em}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      preact/.style={circle, draw=mainblue, fill=white,
+          minimum size=1.1cm, thick, font=\small},
+      param/.style={rectangle, rounded corners=3pt, draw=orange!80!black,
+          fill=notebg, thick, minimum size=0.75cm, font=\small},
+      linklabel/.style={font=\small, orange!60!black},
+      >=Stealth
+    ]
+    % ════ Hidden unit 1 ═══════════════════════════════════════════════════════
+    \begin{scope}
+      \node[preact] (z1) at (6, 0) {$z^{(1)}_1$};
+      \draw[->, thick] (1.8,  0.8) node[left, font=\small] {$x_1 = 0$} -- (z1);
+      \draw[->, thick] (1.8, -0.8) node[left, font=\small] {$x_2 = 1$} -- (z1);
+
+      \node[param] (w11) at (2.4,  2.5) {$w^{(1)}_{11}$};
+      \node[param] (w12) at (2.4, -2.5) {$w^{(1)}_{12}$};
+      \node[param] (b11) at (6.0,  2.5) {$b^{(1)}_1$};
+      \draw[dotted, very thick, orange!80!black] (w11) --
+      node[linklabel, above right, pos=0.4] {$\pd{z^{(1)}_1}{w^{(1)}_{11}}$} (z1);
+      \draw[dotted, very thick, orange!80!black] (w12) --
+      node[linklabel, below right, pos=0.4] {$\pd{z^{(1)}_1}{w^{(1)}_{12}}$} (z1);
+      \draw[dotted, very thick, orange!80!black] (b11) --
+      node[linklabel, right, pos=0.45, xshift=2pt] {$\pd{z^{(1)}_1}{b^{(1)}_1}$} (z1);
+
+      \draw[->, thick, red!70!black, dashed] (11.4, 0) --
+      node[above, font=\small] {$\delta^{(1)}_1 = \pd{J}{z^{(1)}_1}$}
+      node[below, font=\scriptsize, gray!80!black, yshift=-2pt]
+        {from Figure~\ref{fig:hidden-chain}} (z1);
+    \end{scope}
+
+    % ── Separator ──────────────────────────────────────────────────────────────
+    \draw[gray!50, dashed] (0, -3.3) -- (11.6, -3.3);
+
+    % ════ Hidden unit 2 ═══════════════════════════════════════════════════════
+    \begin{scope}[yshift=-6.6cm]
+      \node[preact] (z2) at (6, 0) {$z^{(1)}_2$};
+      \draw[->, thick] (1.8,  0.8) node[left, font=\small] {$x_1 = 0$} -- (z2);
+      \draw[->, thick] (1.8, -0.8) node[left, font=\small] {$x_2 = 1$} -- (z2);
+
+      \node[param] (w21) at (2.4,  2.5) {$w^{(1)}_{21}$};
+      \node[param] (w22) at (2.4, -2.5) {$w^{(1)}_{22}$};
+      \node[param] (b12) at (6.0,  2.5) {$b^{(1)}_2$};
+      \draw[dotted, very thick, orange!80!black] (w21) --
+      node[linklabel, above right, pos=0.4] {$\pd{z^{(1)}_2}{w^{(1)}_{21}}$} (z2);
+      \draw[dotted, very thick, orange!80!black] (w22) --
+      node[linklabel, below right, pos=0.4] {$\pd{z^{(1)}_2}{w^{(1)}_{22}}$} (z2);
+      \draw[dotted, very thick, orange!80!black] (b12) --
+      node[linklabel, right, pos=0.45, xshift=2pt] {$\pd{z^{(1)}_2}{b^{(1)}_2}$} (z2);
+
+      \draw[->, thick, red!70!black, dashed] (11.4, 0) --
+      node[above, font=\small] {$\delta^{(1)}_2 = \pd{J}{z^{(1)}_2}$}
+      node[below, font=\scriptsize, gray!80!black, yshift=-2pt]
+        {from Figure~\ref{fig:hidden-chain}} (z2);
+    \end{scope}
+  \end{tikzpicture}
+  \caption{Zooming in on the hidden pre-activations.  The hidden layer has
+    four weights and two biases, each linked to one $z^{(1)}_i$.  As in the
+    output layer, each parameter's gradient is $\delta^{(1)}_i$ times the
+    label on its link.}
+  \label{fig:hidden-local}
+\end{figure}
 
 % ──────────────────────────────────────────────────────────────────────────────
 \subsection{Applying the Pattern to $h_1$}
@@ -271,18 +594,26 @@ as before:
   = \sol[3cm]{-0.021}
 \]
 
-The weight gradients for row 1 of $\bW^{(1)}$:
+Because $z^{(1)}_1 = w^{(1)}_{11} x_1 + w^{(1)}_{12} x_2 + b^{(1)}_1$,
+the local derivatives are:
+\[
+  \pd{z^{(1)}_1}{w^{(1)}_{11}} = x_1 = 0, \qquad
+  \pd{z^{(1)}_1}{w^{(1)}_{12}} = x_2 = 1, \qquad
+  \pd{z^{(1)}_1}{b^{(1)}_1} = 1.
+\]
+
+The gradients for row 1 of $\bW^{(1)}$ and for $b^{(1)}_1$:
 
 \begin{align*}
-  \pd{J}{w^{(1)}_{11}} &= \delta^{(1)}_1 \cdot x_1 = (-0.021)(0) = \sol[2.5cm]{0.000} \\[4pt]
-  \pd{J}{w^{(1)}_{12}} &= \delta^{(1)}_1 \cdot x_2 = (-0.021)(1) = \sol[2.5cm]{-0.021} \\[4pt]
-  \pd{J}{b^{(1)}_1}    &= \delta^{(1)}_1 = \sol[2.5cm]{-0.021}
+  \pd{J}{w^{(1)}_{11}} & = \delta^{(1)}_1 \cdot x_1 = (-0.021)(0) = \sol[2.5cm]{0.000}  \\[4pt]
+  \pd{J}{w^{(1)}_{12}} & = \delta^{(1)}_1 \cdot x_2 = (-0.021)(1) = \sol[2.5cm]{-0.021} \\[4pt]
+  \pd{J}{b^{(1)}_1}    & = \delta^{(1)}_1 \cdot 1 = \sol[2.5cm]{-0.021}
 \end{align*}
 
 \begin{notebox}
-$\partial J / \partial w^{(1)}_{11} = 0$ because $x_1 = 0$: this input was
-zero, so the weight connecting it had no effect on the prediction --- and
-therefore no effect on the loss.
+  $\partial J / \partial w^{(1)}_{11} = 0$ because $x_1 = 0$: this input was
+  zero, so the weight connecting it had no effect on the prediction --- and
+  therefore no effect on the loss.
 \end{notebox}
 
 % ──────────────────────────────────────────────────────────────────────────────
@@ -295,50 +626,105 @@ therefore no effect on the loss.
   \approx \sol[3cm]{-0.020}
 \]
 
+Because $z^{(1)}_2 = w^{(1)}_{21} x_1 + w^{(1)}_{22} x_2 + b^{(1)}_2$,
+the local derivatives are:
+\[
+  \pd{z^{(1)}_2}{w^{(1)}_{21}} = x_1 = 0, \qquad
+  \pd{z^{(1)}_2}{w^{(1)}_{22}} = x_2 = 1, \qquad
+  \pd{z^{(1)}_2}{b^{(1)}_2} = 1.
+\]
+
+The gradients for row 2 of $\bW^{(1)}$ and for $b^{(1)}_2$:
+
 \begin{align*}
-  \pd{J}{w^{(1)}_{21}} &= \delta^{(1)}_2 \cdot x_1 = (-0.020)(0) = \sol[2.5cm]{0.000} \\[4pt]
-  \pd{J}{w^{(1)}_{22}} &= \delta^{(1)}_2 \cdot x_2 = (-0.020)(1) = \sol[2.5cm]{-0.020} \\[4pt]
-  \pd{J}{b^{(1)}_2}    &= \delta^{(1)}_2 = \sol[2.5cm]{-0.020}
+  \pd{J}{w^{(1)}_{21}} & = \delta^{(1)}_2 \cdot x_1 = (-0.020)(0) = \sol[2.5cm]{0.000}  \\[4pt]
+  \pd{J}{w^{(1)}_{22}} & = \delta^{(1)}_2 \cdot x_2 = (-0.020)(1) = \sol[2.5cm]{-0.020} \\[4pt]
+  \pd{J}{b^{(1)}_2}    & = \delta^{(1)}_2 \cdot 1 = \sol[2.5cm]{-0.020}
 \end{align*}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Summary of All Gradients}
 
 \begin{center}
-\renewcommand{\arraystretch}{1.5}
-\begin{tabular}{lrr}
-\toprule
-Weight & Gradient $\partial J / \partial w$ & GD update ($\eta=0.1$) \\
-\midrule
-$w^{(2)}_1$ & $-0.084$ & $0.5 - 0.1(-0.084) = 0.508$ \\
-$w^{(2)}_2$ & $-0.105$ & $0.5 - 0.1(-0.105) = 0.511$ \\
-$b^{(2)}$   & $-0.168$ & $0.0 - 0.1(-0.168) = 0.017$ \\
-\midrule
-$w^{(1)}_{11}$ & $\phantom{-}0.000$ & $0.5 - 0.1(0.000) = 0.500$ \\
-$w^{(1)}_{12}$ & $-0.021$ & $-0.5 - 0.1(-0.021) = -0.498$ \\
-$b^{(1)}_1$    & $-0.021$ & $0.5 - 0.1(-0.021) = 0.502$ \\
-\midrule
-$w^{(1)}_{21}$ & $\phantom{-}0.000$ & $0.5 - 0.1(0.000) = 0.500$ \\
-$w^{(1)}_{22}$ & $-0.020$ & $0.5 - 0.1(-0.020) = 0.502$ \\
-$b^{(1)}_2$    & $-0.020$ & $0.0 - 0.1(-0.020) = 0.002$ \\
-\bottomrule
-\end{tabular}
+  \renewcommand{\arraystretch}{1.5}
+  \begin{tabular}{lrr}
+    \toprule
+    Parameter      & Current value    & Gradient $\partial J / \partial(\cdot)$ \\
+    \midrule
+    $w^{(2)}_1$    & $\phantom{-}0.5$ & $-0.084$                                \\
+    $w^{(2)}_2$    & $\phantom{-}0.5$ & $-0.105$                                \\
+    $b^{(2)}$      & $\phantom{-}0.0$ & $-0.168$                                \\
+    \midrule
+    $w^{(1)}_{11}$ & $\phantom{-}0.5$ & $\phantom{-}0.000$                      \\
+    $w^{(1)}_{12}$ & $-0.5$           & $-0.021$                                \\
+    $b^{(1)}_1$    & $\phantom{-}0.5$ & $-0.021$                                \\
+    \midrule
+    $w^{(1)}_{21}$ & $\phantom{-}0.5$ & $\phantom{-}0.000$                      \\
+    $w^{(1)}_{22}$ & $\phantom{-}0.5$ & $-0.020$                                \\
+    $b^{(1)}_2$    & $\phantom{-}0.0$ & $-0.020$                                \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+All non-zero gradients are \textbf{negative}, so gradient descent is expected to move those
+parameters up.
+The two weights attached to $x_1 = 0$ ($w^{(1)}_{11}$ and $w^{(1)}_{21}$)
+have zero gradient and should stay put.
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Update}
+
+With all gradients in hand, we apply one gradient descent step
+(Section 3.2) to every parameter:
+\[
+  w \;\longleftarrow\; w - \eta \,\pd{J}{w},
+  \qquad \eta = 0.1.
+\]
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.5}
+  \begin{tabular}{lrlr}
+    \toprule
+    Parameter      & Old              & $\text{old} - \eta \cdot \text{gradient}$ & New                   \\
+    \midrule
+    $w^{(2)}_1$    & $\phantom{-}0.5$ & $0.5 - 0.1(-0.084)$                       & \sol[1.6cm]{$0.508$}  \\
+    $w^{(2)}_2$    & $\phantom{-}0.5$ & $0.5 - 0.1(-0.105)$                       & \sol[1.6cm]{$0.510$}  \\
+    $b^{(2)}$      & $\phantom{-}0.0$ & $0.0 - 0.1(-0.168)$                       & \sol[1.6cm]{$0.017$}  \\
+    \midrule
+    $w^{(1)}_{11}$ & $\phantom{-}0.5$ & $0.5 - 0.1(0.000)$                        & \sol[1.6cm]{$0.500$}  \\
+    $w^{(1)}_{12}$ & $-0.5$           & $-0.5 - 0.1(-0.021)$                      & \sol[1.6cm]{$-0.498$} \\
+    $b^{(1)}_1$    & $\phantom{-}0.5$ & $0.5 - 0.1(-0.021)$                       & \sol[1.6cm]{$0.502$}  \\
+    \midrule
+    $w^{(1)}_{21}$ & $\phantom{-}0.5$ & $0.5 - 0.1(0.000)$                        & \sol[1.6cm]{$0.500$}  \\
+    $w^{(1)}_{22}$ & $\phantom{-}0.5$ & $0.5 - 0.1(-0.020)$                       & \sol[1.6cm]{$0.502$}  \\
+    $b^{(1)}_2$    & $\phantom{-}0.0$ & $0.0 - 0.1(-0.020)$                       & \sol[1.6cm]{$0.002$}  \\
+    \bottomrule
+  \end{tabular}
 \end{center}
 
-\vspace{0.5em}
+Running the forward pass again on the same input $(x_1, x_2) = (0, 1)$
+with the new parameters:
 
-All gradients are \textbf{negative} --- every weight, when increased, would
-decrease the loss.
-So gradient descent moves every weight up slightly.
-After one update step the network would output a value slightly closer to $1$
-for this input.
+\begin{center}
+  \renewcommand{\arraystretch}{1.4}
+  \begin{tabular}{lcc}
+    \toprule
+    Quantity           & Before update & After update         \\
+    \midrule
+    Prediction $\yhat$ & $0.637$       & \sol[1.6cm]{$0.643$} \\
+    Loss $J$           & $0.132$       & \sol[1.6cm]{$0.127$} \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+
+After one update step the prediction has moved closer to the target $y = 1$,
+and the loss has dropped.
 
 \begin{warnbox}
-\textbf{One forward--backward pass updates weights for one input.}
-In practice we cycle through all four XOR inputs (or use mini-batches),
-accumulate gradients, and take one update step per batch.
-After hundreds or thousands of such cycles the network converges and
-correctly classifies all four XOR inputs.
+  \textbf{One forward--backward pass updates weights for one input.}
+  In practice we cycle through all four XOR inputs (or use mini-batches),
+  accumulate gradients, and take one update step per batch.
+  After hundreds or thousands of such cycles the network converges and
+  correctly classifies all four XOR inputs.
 \end{warnbox}
 
 % ══════════════════════════════════════════════════════════════════════════════
@@ -347,34 +733,33 @@ correctly classifies all four XOR inputs.
 The full training loop is now complete in principle:
 
 \begin{center}
-\begin{tikzpicture}[
-  box/.style={draw=mainblue, fill=boxbg, rounded corners=4pt,
-              minimum width=3.2cm, minimum height=1.0cm,
-              font=\small, align=center, thick},
-  >=Stealth
-]
-  \node[box] (fwd)  at (0,    0) {Forward pass\\(Section 3.3)};
-  \node[box] (loss) at (4.5,  0) {Compute loss\\$J = (y-\yhat)^2$};
-  \node[box] (bwd)  at (9.0,  0) {Backprop\\(Section 3.4)};
-  \node[box] (upd)  at (4.5, -2) {Gradient descent\\update};
+  \begin{tikzpicture}[
+      box/.style={draw=mainblue, fill=boxbg, rounded corners=4pt,
+          minimum width=3.8cm, minimum height=1.4cm,
+          font=\normalsize, align=center, thick},
+      flow/.style={->, thick, mainblue},
+      >=Stealth
+    ]
+    \node[box] (fwd)  at (0,    0)   {Forward pass\\(Section 3.3)};
+    \node[box] (loss) at (5.2,  0)   {Compute loss\\$J = (y-\yhat)^2$};
+    \node[box] (bwd)  at (10.4, 0)   {Backprop\\(Section 3.4)};
+    \node[box] (upd)  at (5.2, -3.0) {Gradient descent\\update};
 
-  \draw[->] (fwd)  -- (loss);
-  \draw[->] (loss) -- (bwd);
-  \draw[->] (bwd)  -- ++(0,-1) -| (upd);
-  \draw[->] (upd)  -- ++(-4.5,0) |- (fwd);
-
-  \node[font=\scriptsize, gray] at (4.5, -1.15) {$\partial J/\partial w$};
-\end{tikzpicture}
+    \draw[flow] (fwd)  -- node[above, font=\small, black] {$\yhat$} (loss);
+    \draw[flow] (loss) -- node[above, font=\small, black] {$J$} (bwd);
+    \draw[flow] (bwd.south) |- node[pos=0.25, right, font=\small, black]
+      {$\pd{J}{w},\ \pd{J}{b}$} (upd.east);
+    \draw[flow] (upd.west) -| node[pos=0.75, left, font=\small, black]
+      {new $w,\, b$} (fwd.south);
+  \end{tikzpicture}
 \end{center}
 
 \vspace{0.5em}
 
 \begin{notebox}
-\textbf{Coming next --- Section 3.5: Adam.}
-Plain gradient descent works, but it can be slow or sensitive to the
-learning rate.  Adam is a smarter update rule that adapts the step size for
-each weight automatically.  We will see how it improves on plain gradient
-descent with only a small change to the update formula.
+  \textbf{Note:} Plain gradient descent works, but it can be slow or sensitive to the
+  learning rate. ``Adam" is a smarter update rule that adapts the step size for
+  each weight automatically.
 \end{notebox}
 
 \end{document}

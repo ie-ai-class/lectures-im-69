@@ -8,6 +8,13 @@
     "*.markdown": "default"
   },
   "latex-workshop.formatting.latex": "latexindent",
+  // Treat codebox as verbatim so latexindent never re-indents Python code
+  "latex-workshop.formatting.latexindent.args": [
+    "-c",
+    "%DIR%/",
+    "%TMPFILE%",
+    "-y=defaultIndent: '%INDENT%',verbatimEnvironments:codebox:1"
+  ],
   "pasteImage.insertPattern": "\\rimg{img/${imageFileName}}{}",
   "pasteImage.path": "${currentFileDir}/img"
 }

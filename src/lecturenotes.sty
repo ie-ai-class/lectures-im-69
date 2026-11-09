@@ -41,7 +41,26 @@
 \definecolor{purplebg}{RGB}{245, 235, 255}
 
 % ── Boxes ─────────────────────────────────────────────────────────────────────
-\tcbuselibrary{skins, breakable}
+\tcbuselibrary{skins, breakable, listings}
+
+% codebox — framed Python code block (content is typeset verbatim)
+\definecolor{codebg}{RGB}{246, 248, 250}
+\newtcblisting{codebox}{
+  listing only,
+  colback=codebg, colframe=gray!60,
+  boxrule=0.8pt, arc=3pt,
+  left=6pt, right=6pt, top=2pt, bottom=2pt,
+  listing options={
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{mainblue}\bfseries,
+    commentstyle=\color{gray}\itshape,
+    stringstyle=\color{green!50!black},
+    showstringspaces=false,
+    columns=fullflexible,
+    keepspaces=true
+  }
+}
 
 \newtcolorbox{resultbox}{
   colback=boxbg, colframe=mainblue,
@@ -69,7 +88,7 @@
   boxrule=1pt, arc=4pt,
   title={#1},
   fonttitle=\bfseries,
-  coltitle=green!30!black
+  coltitle=white
 }
 
 \newtcolorbox{patternbox}{
