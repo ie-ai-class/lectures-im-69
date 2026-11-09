@@ -1,0 +1,901 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
+
+% ── Local TikZ styles (match S3/S4) ───────────────────────────────────────────
+\usetikzlibrary{decorations.pathreplacing}
+\providecommand{\bp}{\mathbf{p}}
+\tikzset{
+  neuron/.style={circle, draw=mainblue, fill=boxbg,
+      minimum size=0.75cm, thick, font=\small},
+  preact/.style={circle, draw=mainblue, fill=white,
+      minimum size=0.75cm, thick, font=\small},
+  input/.style={circle, draw=gray!60, fill=gray!15,
+      minimum size=0.75cm, thick, font=\small},
+  wire/.style={gray!70, line width=0.5pt},
+  layerlabel/.style={font=\small\itshape, gray},
+  opbox/.style={draw=orange!70!black, fill=notebg, thick, rounded corners=4pt,
+      minimum height=0.9cm, minimum width=1.5cm, font=\small, align=center},
+}
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Section 3.5: The Multi-Layer Perceptron}} \\[0.3em]
+  {\large\itshape From a Toy Network to a General Architecture} \\[0.5em]
+  {\large AI-IM Class --- Lecture Notes}%
+  \ifstudentmode
+    \quad {\normalsize\color{gray}[Student Copy]}%
+  \fi
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+In Sections 3.3 and 3.4 we computed the forward pass and backpropagation
+\emph{by hand} for a tiny network: two inputs, two hidden neurons and one
+output. Real networks are built from exactly the same pieces, only more of
+them. In this section we step back and look at the network as a whole:
+\begin{itemize}[nosep]
+  \item how the general architecture is organised and how big it can grow,
+  \item how to predict several outputs at once,
+  \item which activation functions are used in practice,
+  \item how gradient descent is run on large datasets, and
+  \item how to change the output layer and loss for classification.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{General Architecture}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Layers and Nodes}
+
+A \textbf{multi-layer perceptron (MLP)}, also called a
+\textbf{fully connected feedforward network}, is a stack of \emph{layers}.
+Each layer is a column of \emph{nodes} (neurons):
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=3.2cm, y=0.95cm, >=Stealth]
+    % ── Nodes ────────────────────────────────────────────────────────────────
+    \foreach \i [evaluate=\i as \y using {2.5-\i}] in {1,...,4}
+    \node[input] (I\i) at (0,\y) {$x_{\i}$};
+    \foreach \i [evaluate=\i as \y using {3.5-\i}] in {1,...,6}
+    \node[neuron] (A\i) at (1,\y) {};
+    \foreach \i [evaluate=\i as \y using {3.5-\i}] in {1,...,6}
+    \node[neuron] (B\i) at (2,\y) {};
+    \foreach \i [evaluate=\i as \y using {1.5-\i}] in {1,...,2}
+    \node[neuron, draw=green!50!black, fill=greenbg] (O\i) at (3,\y)
+    {$\yhat_{\i}$};
+
+    % ── Connections ──────────────────────────────────────────────────────────
+    \foreach \i in {1,...,4} \foreach \j in {1,...,6}
+    \draw[wire] (I\i) -- (A\j);
+    \foreach \i in {1,...,6} \foreach \j in {1,...,6}
+    \draw[wire] (A\i) -- (B\j);
+    \foreach \i in {1,...,6} \foreach \j in {1,...,2}
+    \draw[wire] (B\i) -- (O\j);
+
+    % ── Labels ───────────────────────────────────────────────────────────────
+    \node[layerlabel, align=center] at (0,-3.4) {Input layer\\(4 features)};
+    \node[layerlabel, align=center] at (1,-3.4) {Hidden layer 1\\(6 nodes)};
+    \node[layerlabel, align=center] at (2,-3.4) {Hidden layer 2\\(6 nodes)};
+    \node[layerlabel, align=center] at (3,-3.4) {Output layer\\(2 outputs)};
+
+    \node[font=\scriptsize, gray] (lbl) at (-0.45, 2.6) {node};
+    \draw[->, gray] (lbl) -- (I1);
+  \end{tikzpicture}
+  \caption{A multi-layer perceptron with four inputs, two hidden layers of six
+    nodes each, and two outputs. Every node is connected to every node in the
+    next layer.}
+  \label{fig:mlp-general}
+\end{figure}
+
+\begin{itemize}
+  \item The \textbf{input layer} simply holds the feature values
+        $x_1, \dots, x_d$. It has no weights and does no computation.
+  \item The \textbf{hidden layers} transform the data step by step.
+        They are ``hidden'' because we never observe their values in the
+        data; the network invents them (recall the learned features
+        $h_1, h_2$ of XOR in Section 3.1).
+  \item The \textbf{output layer} produces the prediction(s) $\yhat$.
+  \item The number of nodes in a layer is its \textbf{width}; the number of
+        layers with weights is the network's \textbf{depth}.
+\end{itemize}
+
+Our XOR network from Sections 3.3--3.4 is the special case with
+2 inputs, one hidden layer of width 2, and 1 output.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Inside a Node}
+
+Every hidden or output node does the same two sub-steps that we saw in
+Section 3.3: a weighted sum, then an activation.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth]
+    % inputs
+    \node (h1) at (0,  1.3) {$h_1$};
+    \node (h2) at (0,  0)   {$h_2$};
+    \node (h3) at (0, -1.3) {$h_3$};
+    \node[layerlabel, align=center] at (0, -2.0) {from previous\\layer};
+
+    % node internals
+    \node[preact, minimum size=1.1cm] (S) at (3.4, 0) {$\Sigma$};
+    \node[neuron, minimum size=1.1cm] (P) at (5.8, 0) {$\phi$};
+    \draw[gray!60, dashed, rounded corners=6pt] (2.6,-1.2) rectangle (6.6,1.9);
+    \node[layerlabel] at (4.6, -1.55) {one node};
+
+    \draw[->, thick] (h1) -- node[above, font=\scriptsize, pos=0.45] {$w_1$} (S);
+    \draw[->, thick] (h2) -- node[above, font=\scriptsize, pos=0.45] {$w_2$} (S);
+    \draw[->, thick] (h3) -- node[below, font=\scriptsize, pos=0.45] {$w_3$} (S);
+    \node[font=\scriptsize, gray!80!black] (bias) at (3.4, 1.5) {$+\,b$};
+    \draw[->, gray] (bias) -- (S);
+
+    \draw[->, thick, mainblue] (S) -- node[above] {$z$} (P);
+    \draw[->, thick] (P) -- (8.2, 0) node[right] {$\phi(z)$};
+
+    % formulas
+    \node[font=\small] at (4.6, -2.6)
+    {$z = w_1 h_1 + w_2 h_2 + w_3 h_3 + b,
+        \qquad \text{output} = \phi(z)$};
+  \end{tikzpicture}
+  \caption{The computation inside a single node. $\Sigma$ forms the
+    pre-activation $z$; the activation function $\phi$ is then applied to it.}
+  \label{fig:node}
+\end{figure}
+
+We write $\phi$ for a generic activation function. In Section 3.3 we used
+$\phi = \sigmoid$; the \emph{Activation Functions} part below introduces
+other choices.
+
+\paragraph{The whole layer at once.}
+Stacking the nodes of layer $\ell$ gives the same matrix form we used in
+Section 3.3. With $\bh^{(0)} = \bx$ (the input),
+\begin{resultbox}
+  \[
+    \bz^{(\ell)} = \bW^{(\ell)}\,\bh^{(\ell-1)} + \bb^{(\ell)},
+    \qquad
+    \bh^{(\ell)} = \phi\bigl(\bz^{(\ell)}\bigr),
+    \qquad \ell = 1, 2, \dots, L.
+  \]
+\end{resultbox}
+If layer $\ell-1$ has $n_{\ell-1}$ nodes and layer $\ell$ has $n_\ell$ nodes,
+then $\bW^{(\ell)}$ is an $n_\ell \times n_{\ell-1}$ matrix (row $i$ holds the
+weights feeding into node $i$) and $\bb^{(\ell)}$ has $n_\ell$ entries.
+The forward pass is just this pair of equations repeated layer after layer.
+
+\begin{notebox}
+  \textbf{Regression output.} For a regression problem the target $y$ can be
+  any real number, so we do \emph{not} squeeze the final output through a
+  sigmoid. The output layer uses the \textbf{identity} (``linear'')
+  activation: $\yhat = z^{(L)}$.
+\end{notebox}
+
+\paragraph{Counting parameters.}
+Each node in layer $\ell$ has one weight per incoming node plus one bias, so
+\begin{resultbox}
+  \[
+    \#\text{parameters in layer } \ell
+    = \underbrace{n_{\ell-1} \times n_\ell}_{\text{weights}}
+    + \underbrace{n_\ell}_{\text{biases}}
+    = (n_{\ell-1} + 1)\, n_\ell .
+  \]
+\end{resultbox}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{More Nodes, More Flexibility}
+\label{sec:flexibility}
+
+To see what extra nodes and layers buy us, we fit a single-input,
+single-output regression problem: the blue curve below is a wiggly,
+noisy function of $x$, and we fit it with increasingly large networks.
+
+\paragraph{Step 0: No hidden layer.}
+With the input connected straight to a linear output node, the network is
+\[
+  \yhat = w\,x + b,
+\]
+which is ordinary linear regression with $2$ parameters. A straight line
+cannot follow the bumps.
+
+\rimg[0.8]{img/fit_linear.png}{No hidden layer: $\yhat = wx + b$
+  (2 parameters).}
+
+\paragraph{Step 1: One hidden node.}
+Insert one sigmoid node between input and output:
+\[
+  \yhat = w^{(2)}\,\sigmoid\!\bigl(w^{(1)} x + b^{(1)}\bigr) + b^{(2)}.
+\]
+Now the fit is a single ``S'' that has been shifted and stretched.
+It follows the overall rise of the data but not the bumps
+(4 parameters).
+
+\rimg[0.8]{img/fit_1hidden_1node.png}{One hidden node with sigmoid activation
+  (4 parameters).}
+
+\paragraph{Step 2: Ten hidden nodes.}
+Widen the hidden layer to ten nodes:
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth]
+    \node (x) at (-1.4, 0) {$x$};
+    \node[input] (In) at (0, 0) {In};
+    \node[neuron] (H1) at (3,  2.4) {1};
+    \node[neuron] (H2) at (3,  1.2) {2};
+    \node[neuron] (H3) at (3,  0)   {3};
+    \node at (3, -1.05) {$\vdots$};
+    \node[neuron] (H10) at (3, -2.2) {10};
+    \node[neuron, draw=green!50!black, fill=greenbg] (Out) at (6, 0) {Out};
+    \node (yh) at (7.4, 0) {$\yhat$};
+
+    \draw[->, thick] (x) -- (In);
+    \draw[->, thick] (Out) -- (yh);
+    \foreach \h in {H1,H2,H3,H10} {
+        \draw[wire, ->] (In) -- (\h);
+        \draw[wire, ->] (\h) -- (Out);
+      }
+
+    \node[font=\scriptsize, gray!80!black, right=0.15cm of H1]
+    {$w^{(1)}_1, b^{(1)}_1$};
+    \node[font=\scriptsize, gray!80!black, right=0.15cm of H10]
+    {$w^{(1)}_{10}, b^{(1)}_{10}$};
+    \node[font=\scriptsize, gray!80!black, above=0.25cm of Out, align=center]
+    {$w^{(2)}_1, \dots, w^{(2)}_{10}$\\$b^{(2)}$};
+
+    \node[layerlabel] at (3, -3.2) {Hidden layer ($\sigmoid$)};
+  \end{tikzpicture}
+  \caption{One hidden layer with ten sigmoid nodes and a linear output.}
+\end{figure}
+
+The prediction is a \emph{weighted sum of ten S-curves}:
+\[
+  \yhat = \sum_{j=1}^{10} w^{(2)}_j\,
+  \sigmoid\!\bigl(w^{(1)}_j x + b^{(1)}_j\bigr) + b^{(2)}.
+\]
+Each S-curve can sit at a different place and have a different height and
+steepness, so together they can trace the bumps of the data. Count the
+parameters:
+\[
+  \#\text{params}
+  = \underbrace{(1+1)\times 10}_{\text{hidden}}
+  + \underbrace{(10+1)\times 1}_{\text{output}}
+  = \sol[2.5cm]{20 + 11 = 31.}
+\]
+
+\rimg[0.8]{img/fit_1hidden_10nodes.png}{One hidden layer, ten sigmoid nodes.
+  The fit now follows every bump.}
+
+\paragraph{Step 3: Two hidden layers of 64 nodes.}
+Now stack two wide layers: $1 \to 64 \to 64 \to 1$.
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{lccc}
+    \toprule
+    Layer                     & $n_{\ell-1}$          & $n_\ell$ & Parameters $(n_{\ell-1}+1)\,n_\ell$ \\
+    \midrule
+    Hidden 1                  & 1                     & 64       & $\sol[2.2cm]{128}$                  \\
+    Hidden 2                  & 64                    & 64       & $\sol[2.2cm]{4\,160}$               \\
+    Output                    & 64                    & 1        & $\sol[2.2cm]{65}$                   \\
+    \midrule
+    \multicolumn{3}{l}{Total} & $\sol[2.2cm]{4\,353}$                                                  \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\rimg[0.8]{img/fit_2hidden_64nodes.png}{Two hidden layers of 64 nodes each.}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Deep Neural Networks}
+
+A network with many hidden layers is called a \textbf{deep neural network};
+this is where the name \emph{deep learning} comes from. A common design makes
+the layers wide near the input and gradually narrower towards the output:
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth,
+      block/.style={draw=mainblue, fill=boxbg, thick, rounded corners=3pt,
+          minimum width=0.85cm, font=\small}]
+    \node (x) at (-1.3, 0) {$x$};
+    \node[input, minimum size=0.9cm] (In) at (0, 0) {In};
+    \node[block, minimum height=5.0cm]   (L1) at (1.5, 0) {256};
+    \node[block, minimum height=5.0cm]   (L2) at (2.8, 0) {256};
+    \node[block, minimum height=2.5cm]   (L3) at (4.1, 0) {128};
+    \node[block, minimum height=1.25cm]  (L4) at (5.4, 0) {64};
+    \node[block, minimum height=0.75cm]  (L5) at (6.7, 0) {32};
+    \node[block, minimum height=0.6cm]   (L6) at (8.0, 0) {16};
+    \node[neuron, minimum size=0.9cm, draw=green!50!black, fill=greenbg]
+    (Out) at (9.5, 0) {Out};
+    \node (yh) at (10.8, 0) {$\yhat$};
+
+    \draw[->, thick] (x) -- (In);
+    \draw[thick, gray] (In) -- (L1) (L1) -- (L2) (L2) -- (L3) (L3) -- (L4)
+    (L4) -- (L5) (L5) -- (L6) (L6) -- (Out);
+    \draw[->, thick] (Out) -- (yh);
+
+    \draw[decorate, decoration={brace, amplitude=6pt, mirror}, gray]
+    (1.0,-2.8) -- (8.5,-2.8) node[midway, below=8pt, layerlabel]
+    {six hidden layers (block height $\propto$ width)};
+  \end{tikzpicture}
+  \caption{A deep network: $1 \to 256 \to 256 \to 128 \to 64 \to 32 \to 16
+      \to 1$. Each block is a fully connected layer; the number is its width.}
+  \label{fig:deep}
+\end{figure}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabular}{lrrr}
+    \toprule
+    Layer                     & $n_{\ell-1}$            & $n_\ell$ & Parameters            \\
+    \midrule
+    Hidden 1                  & 1                       & 256      & $512$                 \\
+    Hidden 2                  & 256                     & 256      & $65\,792$             \\
+    Hidden 3                  & 256                     & 128      & $32\,896$             \\
+    Hidden 4                  & 128                     & 64       & $\sol[1.8cm]{8\,256}$ \\
+    Hidden 5                  & 64                      & 32       & $\sol[1.8cm]{2\,080}$ \\
+    Hidden 6                  & 32                      & 16       & $\sol[1.8cm]{528}$    \\
+    Output                    & 16                      & 1        & $\sol[1.8cm]{17}$     \\
+    \midrule
+    \multicolumn{3}{l}{Total} & $\sol[1.8cm]{110\,081}$                                    \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\rimg[0.8]{img/fit_deep.png}{The deep network of Figure~\ref{fig:deep}.
+  The fit is made of short straight segments, the
+  signature of the ReLU activation (see Activation Functions below).}
+
+\begin{warnbox}
+  \textbf{More parameters is not automatically better.}
+  The 31-parameter network already fits this data well. The extra
+  parameters of the larger networks mostly go into following the
+  \emph{noise}, and they cost more data and computation to train.
+  We will return to this trade-off (overfitting) later in the course.
+\end{warnbox}
+
+\begin{stepbox}{Exercise 1 \quad Count the parameters}
+  A network takes $3$ input features, has two hidden layers of widths
+  $5$ and $4$, and produces $2$ outputs. How many weights and biases does
+  it have?
+  \[
+    \#\text{params}
+    = \sol[10cm]{(3+1)\cdot 5 + (5+1)\cdot 4 + (4+1)\cdot 2 = 20 + 24 + 10 = 54.}
+  \]
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Multiple Outputs (Regression)}
+
+Nothing forces the output layer to have a single node. If we want to predict
+$K$ quantities at once, for example the demand for three products next week,
+we simply put $K$ nodes in the output layer, one per target:
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=3cm, y=1cm, >=Stealth]
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3} {
+        \node (xin\i) at (-0.55,\y) {$x_{\i}$};
+        \node[input] (I\i) at (0,\y) {};
+        \draw[->, thick] (xin\i) -- (I\i);
+      }
+    \node[neuron] (A1) at (1, 1.8) {};
+    \node[neuron] (A2) at (1, 0.6) {};
+    \node[neuron] (A3) at (1, -0.6) {};
+    \node at (1, -1.45) {$\vdots$};
+    \node[neuron] (A4) at (1, -2.2) {};
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3} {
+        \node[neuron, draw=green!50!black, fill=greenbg] (O\i) at (2,\y) {};
+        \node (yout\i) at (2.55,\y) {$\yhat_{\i}$};
+        \draw[->, thick] (O\i) -- (yout\i);
+      }
+    \foreach \i in {1,...,3} \foreach \j in {1,...,4}
+    \draw[wire] (I\i) -- (A\j);
+    \foreach \i in {1,...,4} \foreach \j in {1,...,3}
+    \draw[wire] (A\i) -- (O\j);
+
+    \node[layerlabel] at (0, -3.0) {Inputs};
+    \node[layerlabel] at (1, -3.0) {Hidden layer(s)};
+    \node[layerlabel] at (2, -3.0) {Outputs (linear)};
+  \end{tikzpicture}
+  \caption{A network with three inputs and three outputs. Each output node is
+    a linear node with its own weights and bias.}
+  \label{fig:multi-output}
+\end{figure}
+
+The hidden layers are \emph{shared}: all three predictions are built from the
+same learned features. Only the last layer has separate weights for each
+output. The loss simply adds up the squared errors over all outputs and all
+samples:
+\begin{resultbox}
+  \[
+    J = \frac{1}{n} \sum_{i=1}^{n} \sum_{k=1}^{K}
+    \bigl(y^{(i)}_k - \yhat^{(i)}_k\bigr)^2 .
+  \]
+\end{resultbox}
+Backpropagation works exactly as before: each output node receives its own
+error signal $\yhat_k - y_k$, and the hidden nodes collect the signals from
+\emph{all} outputs they feed into.
+
+\begin{notebox}
+  \textbf{Mind the scales.} If one target is measured in thousands and
+  another in fractions, the large one dominates the sum. It is good practice
+  to standardise each target (and each input) before training.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Activation Functions}
+\label{sec:activation}
+
+The activation $\phi$ is what makes a network more than linear regression:
+without it, stacking layers would just multiply matrices together and the
+whole network would collapse to a single linear function. Four common choices
+are shown below.
+
+% helper: one small axes panel ------------------------------------------------
+\newcommand{\actaxes}[4]{% xmin, xmax, ymin, ymax
+  \draw[gray!40, ->] (#1,0) -- (#2+0.3,0) node[right, font=\scriptsize, gray] {$z$};
+  \draw[gray!40, ->] (0,#3) -- (0,#4+0.3);
+}
+
+\begin{figure}[H]
+  \centering
+  % ── Sigmoid ────────────────────────────────────────────────────────────────
+  \begin{minipage}[b]{0.48\textwidth}
+    \centering
+    \begin{tikzpicture}[x=0.55cm, y=2.6cm]
+      \actaxes{-6}{6}{-0.05}{1.05}
+      \draw[gray!50, dashed] (-6,1) -- (6,1);
+      \foreach \t in {-6,-3,3,6}
+      \draw[gray!40] (\t,0) -- (\t,-0.03) node[below, font=\tiny, gray] {$\t$};
+      \node[left, font=\tiny, gray, fill=white, inner sep=1pt] at (0,1) {$1$};
+      \node[left, font=\tiny, gray, fill=white, inner sep=1pt] at (0,0.5) {$0.5$};
+      \draw[mainblue, very thick, smooth, domain=-6:6, samples=80]
+      plot (\x, {1/(1+exp(-\x))});
+    \end{tikzpicture}\\[2pt]
+    \textbf{Sigmoid} \quad $\sigmoid(z) = \dfrac{1}{1+e^{-z}}$\\
+    {\small range $(0, 1)$}
+  \end{minipage}\hfill
+  % ── Tanh ───────────────────────────────────────────────────────────────────
+  \begin{minipage}[b]{0.48\textwidth}
+    \centering
+    \begin{tikzpicture}[x=0.55cm, y=1.3cm]
+      \actaxes{-6}{6}{-1.1}{1.1}
+      \draw[gray!50, dashed] (-6,1) -- (6,1);
+      \draw[gray!50, dashed] (-6,-1) -- (6,-1);
+      \foreach \t in {-6,-3,3,6}
+      \draw[gray!40] (\t,0) -- (\t,-0.06) node[below, font=\tiny, gray] {$\t$};
+      \node[left, font=\tiny, gray, fill=white, inner sep=1pt] at (0,1) {$1$};
+      \node[left, font=\tiny, gray, fill=white, inner sep=1pt] at (0,-1) {$-1$};
+      \draw[mainblue, very thick, smooth, domain=-6:6, samples=80]
+      plot (\x, {tanh(\x)});
+    \end{tikzpicture}\\[2pt]
+    \textbf{Tanh} \quad $\tanh(z) = \dfrac{e^{z}-e^{-z}}{e^{z}+e^{-z}}$\\
+    {\small range $(-1, 1)$}
+  \end{minipage}
+
+  \vspace{1.2em}
+
+  % ── ReLU ───────────────────────────────────────────────────────────────────
+  \begin{minipage}[b]{0.48\textwidth}
+    \centering
+    \begin{tikzpicture}[x=0.55cm, y=0.5cm]
+      \actaxes{-6}{6}{-1}{6}
+      \foreach \t in {-6,-3,3,6}
+      \draw[gray!40] (\t,0) -- (\t,-0.15) node[below, font=\tiny, gray] {$\t$};
+      \foreach \t in {3,6}
+      \node[left, font=\tiny, gray, fill=white, inner sep=1pt] at (0,\t) {$\t$};
+      \draw[mainblue, very thick] (-6,0) -- (0,0) -- (6,6);
+    \end{tikzpicture}\\[2pt]
+    \textbf{ReLU} \quad $\relu(z) = \max(0, z)$\\
+    {\small range $[0, \infty)$}
+  \end{minipage}\hfill
+  % ── Leaky ReLU ─────────────────────────────────────────────────────────────
+  \begin{minipage}[b]{0.48\textwidth}
+    \centering
+    \begin{tikzpicture}[x=0.55cm, y=0.5cm]
+      \actaxes{-6}{6}{-1}{6}
+      \foreach \t in {-6,-3,3,6}
+      \draw[gray!40] (\t,0) -- (\t,-0.15) node[below, font=\tiny, gray] {$\t$};
+      \foreach \t in {3,6}
+      \node[left, font=\tiny, gray, fill=white, inner sep=1pt] at (0,\t) {$\t$};
+      \draw[mainblue, very thick] (-6,-0.6) -- (0,0) -- (6,6);
+    \end{tikzpicture}\\[2pt]
+    \textbf{Leaky ReLU} \quad $\phi(z) = \max(\alpha z, z)$\\
+    {\small range $(-\infty, \infty)$, shown with $\alpha = 0.1$}
+  \end{minipage}
+  \caption{Four common activation functions.}
+  \label{fig:activations}
+\end{figure}
+
+\paragraph{Why not always use sigmoid?}
+Backpropagation (Section 3.4) multiplies one factor $\phi'(z)$ per layer on
+the way back. For the sigmoid, $\sigmoid'(z) = \sigmoid(z)\bigl(1-\sigmoid(z)\bigr)
+  \le 0.25$, and it is almost $0$ whenever $|z|$ is large (the flat parts of the
+``S''). Through many layers these small factors multiply together, and the
+gradient reaching the first layers becomes tiny. This is the
+\textbf{vanishing gradient} problem: the early layers barely learn.
+
+\paragraph{ReLU.}
+The \textbf{rectified linear unit} has derivative exactly $1$ for $z > 0$, so
+gradients pass through active nodes unchanged. It is also very cheap to
+compute. ReLU is the default choice for hidden layers in modern networks.
+Its weakness: for $z < 0$ the derivative is $0$, so a node whose
+pre-activation is always negative stops learning (a ``dead'' node).
+\textbf{Leaky ReLU} fixes this by giving the negative side a small slope
+$\alpha$ (typically $0.01$--$0.1$).
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{llll}
+    \toprule
+    Activation & Derivative $\phi'(z)$                  & Range              & Typical use                      \\
+    \midrule
+    Sigmoid    & $\sigmoid(z)\bigl(1-\sigmoid(z)\bigr)$ & $(0,1)$            & output for binary classification \\
+    Tanh       & $1 - \tanh^2(z)$                       & $(-1,1)$           & hidden layers (older networks)   \\
+    ReLU       & $1$ if $z>0$, else $0$                 & $[0,\infty)$       & hidden layers (default)          \\
+    Leaky ReLU & $1$ if $z>0$, else $\alpha$            & $(-\infty,\infty)$ & hidden layers                    \\
+    Identity   & $1$                                    & $(-\infty,\infty)$ & output for regression            \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\begin{notebox}
+  \textbf{Look back at the fits.} With sigmoid hidden nodes
+  (the fits for Steps 1--3 above) the fitted curve is a sum of
+  smooth S-shapes. With ReLU nodes it is a sum of ``hinges'' $\max(0, wx+b)$,
+  which is why the deep network's fit is made of straight pieces joined at
+  kinks.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Optimizer: Gradient Descent on Large Datasets}
+
+In Section 3.4 we updated the weights using the gradient from a
+\emph{single} XOR input. In general the loss is an average over all $n$
+training samples,
+\[
+  J(\bth) = \frac{1}{n} \sum_{i=1}^{n} J^{(i)}(\bth),
+\]
+where $\bth$ collects every weight and bias. Its gradient is therefore an
+average of $n$ per-sample gradients. When $n$ is in the millions, computing
+the exact gradient before \emph{every} small step is far too slow.
+
+\paragraph{Mini-batches.}
+The fix is to \textbf{estimate} the gradient from a small random subset of
+the data, called a \textbf{mini-batch} of size $B$:
+\[
+  \nabla J(\bth) \;\approx\; \frac{1}{B} \sum_{i \in \text{batch}}
+  \nabla J^{(i)}(\bth),
+  \qquad
+  \bth \leftarrow \bth - \eta\, \nabla J(\bth).
+\]
+The estimate is noisy, but it is cheap, so we can take many more steps in the
+same amount of time. On average the steps still point downhill.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      sample/.style={draw=gray!70, minimum size=0.55cm, inner sep=0pt},
+      >=Stealth]
+    \foreach \i in {0,...,11} {
+        \pgfmathtruncatemacro{\b}{int(\i/4)}
+        \ifcase\b
+          \node[sample, fill=boxbg]        at (\i*0.6, 0) {};
+        \or
+          \node[sample, fill=greenbg]      at (\i*0.6, 0) {};
+        \or
+          \node[sample, fill=notebg]       at (\i*0.6, 0) {};
+        \fi
+      }
+    \foreach \b/\c in {0/Batch 1, 1/Batch 2, 2/Batch 3} {
+        \draw[decorate, decoration={brace, amplitude=5pt, mirror}, gray]
+        (\b*2.4-0.27, -0.45) -- (\b*2.4+1.8+0.27, -0.45)
+        node[midway, below=6pt, font=\small] {\c};
+        \draw[->, gray] (\b*2.4+0.9, -1.35) -- (\b*2.4+0.9, -1.85)
+        node[below, font=\scriptsize, black] {update $\bth$};
+      }
+    \node[font=\small, anchor=west] at (7.4, 0) {$n = 12$ samples (shuffled)};
+    \node[font=\small, anchor=west] at (7.4, -0.9) {$B = 4$};
+    \node[font=\small, anchor=west] at (7.4, -1.8) {$\Rightarrow$ 3 updates per epoch};
+  \end{tikzpicture}
+  \caption{One epoch of mini-batch gradient descent. The shuffled training set
+    is cut into batches; each batch gives one gradient estimate and one
+    update.}
+\end{figure}
+
+One full pass through the training data is called an \textbf{epoch}.
+Training usually runs for many epochs, reshuffling the data each time.
+Depending on the batch size we get three flavours:
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{llll}
+    \toprule
+    Method              & Batch size  & Updates / epoch     & Character                     \\
+    \midrule
+    Batch GD            & $B = n$     & $1$                 & exact gradient, slow per step \\
+    Stochastic GD (SGD) & $B = 1$     & $n$                 & very noisy, cheap per step    \\
+    Mini-batch GD       & $1 < B < n$ & $\lceil n/B \rceil$ & the practical compromise      \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+In practice ``SGD'' usually refers to the mini-batch version, with batch
+sizes such as $32$, $64$ or $128$.
+
+\begin{stepbox}{Exercise 2 \quad Updates per epoch}
+  A training set has $n = 10\,000$ samples and we use $B = 64$.
+  How many weight updates happen in one epoch, and in $20$ epochs?
+  \[
+    \sol[11cm]{\lceil 10\,000 / 64 \rceil = \lceil 156.25 \rceil = 157
+      \text{ updates per epoch;}\quad 157 \times 20 = 3\,140 \text{ updates.}}
+  \]
+\end{stepbox}
+
+\begin{notebox}
+  \textbf{Beyond plain SGD.} Plain (mini-batch) SGD uses the same learning
+  rate $\eta$ for every weight. \textbf{Adam} (adaptive moment estimation)
+  is SGD with an \emph{adaptive learning rate}: it keeps a running average of
+  past gradients and adjusts the step size for each weight automatically.
+  Adam is the default optimizer in most deep-learning work, and it is the
+  topic of the next section.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Classification}
+
+So far the outputs were real numbers. For \textbf{multiclass classification}
+the target is one of $C$ categories, for example a product graded
+\emph{A}, \emph{B} or \emph{C}. Three changes turn the regression network into
+a classifier: the label encoding, the output layer, and the loss.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{One-Hot Encoding}
+
+We cannot feed the labels ``A, B, C'' into a loss function, and coding them as
+$1, 2, 3$ would wrongly suggest that C is ``more'' than A. Instead each label
+becomes a vector of length $C$ with a $1$ in the position of the true class
+and $0$ elsewhere:
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.25}
+  \begin{tabular}{ccc}
+    \toprule
+    Label & Class index & One-hot vector $\by$ \\
+    \midrule
+    A     & 1           & $[1, 0, 0]$          \\
+    B     & 2           & $[0, 1, 0]$          \\
+    C     & 3           & $[0, 0, 1]$          \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+The output layer gets \textbf{one node per class}, so $C$ output nodes.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Softmax: From Scores to Probabilities}
+
+The output nodes are linear, so they produce arbitrary real numbers
+$z_1, \dots, z_C$, called \textbf{logits} (raw scores). We want instead a
+probability for each class. The \textbf{softmax} function does this:
+\begin{resultbox}
+  \[
+    p_k = \operatorname{softmax}(z_1, \dots, z_C)_k
+    = \frac{e^{z_k}}{\sum_{j=1}^{C} e^{z_j}},
+    \qquad k = 1, \dots, C.
+  \]
+\end{resultbox}
+Exponentiating makes every score positive, and dividing by the sum makes the
+scores add up to $1$. So $0 < p_k < 1$ and $\sum_k p_k = 1$. The largest
+logit always gets the largest probability, and the predicted class is the one
+with the highest $p_k$.
+
+\begin{stepbox}{Exercise 3 \quad Compute a softmax}
+  A network outputs the logits $\bz = [2.0,\; 1.0,\; 0.1]$. Compute the class
+  probabilities (to three decimals).
+  \[
+    e^{2.0} = \sol[1.5cm]{7.389}, \quad
+    e^{1.0} = \sol[1.5cm]{2.718}, \quad
+    e^{0.1} = \sol[1.5cm]{1.105}, \quad
+    \text{sum} = \sol[1.5cm]{11.212}
+  \]
+  \[
+    \bp = \bigl[\,\sol[1.3cm]{0.659},\; \sol[1.3cm]{0.242},\;
+      \sol[1.3cm]{0.099}\,\bigr]
+  \]
+\end{stepbox}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Categorical Cross-Entropy Loss}
+
+In Section 1.2 we derived the binary cross-entropy (BCE) loss for logistic
+regression. Its multiclass version is the
+\textbf{categorical cross-entropy (CCE)}:
+\begin{resultbox}
+  \[
+    J = -\frac{1}{n} \sum_{i=1}^{n} \sum_{k=1}^{C}
+    y^{(i)}_k \,\log p^{(i)}_k .
+  \]
+\end{resultbox}
+Because $\by^{(i)}$ is one-hot, only one term of the inner sum is non-zero:
+the one for the true class. The loss is therefore simply
+\[
+  J = -\frac{1}{n} \sum_{i=1}^{n} \log\bigl(
+  \text{probability the model gives to the \emph{true} class of sample } i
+  \bigr).
+\]
+If the model is confident and right ($p \to 1$), the term $-\log p \to 0$.
+If it is confident and wrong ($p \to 0$), $-\log p \to \infty$. As in
+Section 1.2, $\log$ is the natural logarithm.
+
+\begin{example}
+  Two samples with three classes:
+  \[
+    \begin{array}{lll}
+      \by^{(1)} = [0, 1, 0], & \bp^{(1)} = [0.05,\; \mathbf{0.95},\; 0.00]
+                             & \text{(true class 2)}                       \\[2pt]
+      \by^{(2)} = [0, 0, 1], & \bp^{(2)} = [0.10,\; 0.80,\; \mathbf{0.10}]
+                             & \text{(true class 3)}
+    \end{array}
+  \]
+  Picking out the probability of the true class in each row,
+  \[
+    J = -\frac{1}{2}\bigl(\log 0.95 + \log 0.10\bigr)
+    = -\frac{1}{2}\bigl(-0.051 - 2.303\bigr) = 1.177 .
+  \]
+  Almost all of the loss comes from sample 2, which the model gets wrong.
+\end{example}
+
+\begin{stepbox}{Exercise 4 \quad Loss of a single prediction}
+  For the softmax output of Exercise 3, compute the CCE loss of this one
+  sample if the true class is (a) class 1, (b) class 3.
+  \[
+    \text{(a)}\; -\log \sol[1.3cm]{0.659} = \sol[1.5cm]{0.417},
+    \qquad
+    \text{(b)}\; -\log \sol[1.3cm]{0.099} = \sol[1.5cm]{2.313}
+  \]
+\end{stepbox}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{The Complete Classifier}
+
+Putting it together, the forward pass of a classifier ends with a softmax
+and the loss compares its probabilities with the one-hot label:
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, y=1.1cm]
+    % inputs
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3}
+    \node[input] (I\i) at (0,\y) {$x_{\i}$};
+    % hidden block
+    \node[draw=mainblue, fill=boxbg, thick, rounded corners=4pt,
+      minimum width=1.6cm, minimum height=3.4cm, align=center, font=\small]
+    (H) at (2.3, 0) {hidden\\layers};
+    % logits
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3}
+    \node[preact] (Z\i) at (4.6,\y) {$z_{\i}$};
+    \foreach \i in {1,...,3} {
+        \draw[wire, ->] (I\i) -- (H.west |- I\i);
+        \draw[wire, ->] (H.east |- Z\i) -- (Z\i);
+      }
+    % softmax
+    \node[opbox] (SM) at (6.6, 0) {softmax};
+    \foreach \i in {1,...,3} \draw[->, gray] (Z\i) -- (SM.west);
+    % probabilities
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3} {
+        \node (P\i) at (8.5,\y) {$p_{\i}$};
+        \draw[->, gray] (SM.east) -- (P\i);
+      }
+    % loss
+    \node[opbox] (L) at (10.4, 0) {CCE};
+    \foreach \i in {1,...,3} \draw[->, gray] (P\i) -- (L.west);
+    \node (y) at (10.4, -2.4) {$\by$ (one-hot)};
+    \draw[->, gray] (y) -- (L);
+    \draw[->, thick] (L) -- (11.9, 0) node[right] {$J$};
+
+    % labels
+    \node[layerlabel] at (4.6, -1.6) {logits};
+    \node[layerlabel] at (8.5, -1.6) {probabilities};
+  \end{tikzpicture}
+  \caption{A three-class classifier. The output layer produces logits; softmax
+    turns them into probabilities; the CCE loss compares them with the
+    one-hot label.}
+  \label{fig:classifier}
+\end{figure}
+
+\begin{notebox}
+  \textbf{A very clean gradient.} When softmax is followed by CCE, the error
+  signal at output node $k$ turns out to be simply
+  \[
+    \pd{J}{z_k} = p_k - y_k ,
+  \]
+  the same ``prediction minus target'' form we saw for regression in
+  Section 3.4. Backpropagation then continues through the hidden layers
+  exactly as before.
+\end{notebox}
+
+\paragraph{Binary classification.}
+With only two classes we can use a single output node with a sigmoid,
+$\hat{p} = \sigmoid(z)$ = probability of class 1, together with the BCE
+loss from Section 1.2. This is exactly the setup of our XOR network. (A
+two-node softmax with CCE gives the same model; one sigmoid node is just more
+economical.)
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Labels and Outputs in Practice}
+
+Deep-learning libraries differ in the details, but two choices always have to
+match what the loss function expects:
+
+\begin{enumerate}
+  \item \textbf{How the labels are stored.}
+        \begin{itemize}[nosep]
+          \item As \emph{one-hot vectors}: $\by = [0, 0, 1]$.
+          \item As an \emph{integer class index}: $y = 2$ (counting from 0)
+                or $y = 3$ (counting from 1). This saves memory when $C$ is
+                large; the loss picks out $p_y$ directly, which is the same
+                number as $\sum_k y_k \log p_k$.
+        \end{itemize}
+  \item \textbf{What the network outputs.}
+        \begin{itemize}[nosep]
+          \item \emph{Probabilities}: the model applies softmax itself,
+                e.g.\ $[0.30, 0.15, 0.55]$.
+          \item \emph{Logits}: the model stops at $\bz$,
+                e.g.\ $[1.5, 0.8, 2.1]$, and the loss function applies
+                softmax internally.
+        \end{itemize}
+\end{enumerate}
+
+\begin{warnbox}
+  \textbf{Most libraries prefer logits.} Computing softmax and then $\log$
+  separately can overflow ($e^{z}$ for large $z$) or take $\log 0$. A loss
+  function that receives the logits can combine both steps in a numerically
+  safe way. The common mistake is to apply softmax in the model \emph{and}
+  again inside the loss; check which form your loss function expects.
+\end{warnbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Summary}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{llll}
+    \toprule
+    Task                     & Outputs & Output activation & Loss         \\
+    \midrule
+    Regression (one target)  & 1       & identity          & MSE          \\
+    Regression ($K$ targets) & $K$     & identity          & MSE (summed) \\
+    Binary classification    & 1       & sigmoid           & BCE          \\
+    Multiclass ($C$ classes) & $C$     & softmax           & CCE          \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\begin{itemize}
+  \item An MLP is a stack of fully connected layers. Each layer computes
+        \[\bh^{(\ell)} = \phi\bigl(\bW^{(\ell)} \bh^{(\ell-1)} + \bb^{(\ell)}\bigr).\]
+  \item A layer with $n_{\ell-1}$ inputs and $n_\ell$ nodes has
+        $(n_{\ell-1}+1)\,n_\ell$ parameters. Width and depth add flexibility,
+        but also cost and the risk of fitting noise.
+  \item Hidden layers usually use ReLU (or a variant); sigmoid and tanh suffer
+        from vanishing gradients in deep networks.
+  \item Training uses mini-batch gradient descent: one update per batch, many
+        epochs. Adam (next section) adapts the step size per weight.
+  \item For classification: one-hot labels, $C$ output nodes, softmax, and
+        categorical cross-entropy.
+\end{itemize}
+
+\end{document}
