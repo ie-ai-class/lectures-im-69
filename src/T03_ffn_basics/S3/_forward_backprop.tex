@@ -366,19 +366,19 @@ $\eta = 0.1$ gives the following new parameters:
   \renewcommand{\arraystretch}{1.4}
   \begin{tabular}{lrrr}
     \toprule
-    Parameter      & Old              & Gradient $\partial J/\partial(\cdot)$ & New                \\
+    Parameter      & Old              & Gradient $\partial J/\partial(\cdot)$ & New                           \\
     \midrule
-    $w^{(2)}_1$    & $\phantom{-}0.5$ & $-0.084$                              & $\phantom{-}0.508$ \\
-    $w^{(2)}_2$    & $\phantom{-}0.5$ & $-0.105$                              & $\phantom{-}0.510$ \\
-    $b^{(2)}$      & $\phantom{-}0.0$ & $-0.168$                              & $\phantom{-}0.017$ \\
+    $w^{(2)}_1$    & $\phantom{-}0.5$ & $-0.084$                              & $\phantom{-}0.508$            \\
+    $w^{(2)}_2$    & $\phantom{-}0.5$ & $-0.105$                              & $\phantom{-}0.510$            \\
+    $b^{(2)}$      & $\phantom{-}0.0$ & $-0.168$                              & $\phantom{-}0.017$            \\
     \midrule
-    $w^{(1)}_{11}$ & $\phantom{-}0.5$ & $\phantom{-}0.000$                    & $\phantom{-}0.500$ \\
-    $w^{(1)}_{12}$ & $-0.5$           & $-0.021$                              & $-0.498$           \\
-    $b^{(1)}_1$    & $\phantom{-}0.5$ & $-0.021$                              & $\phantom{-}0.502$ \\
+    $w^{(1)}_{11}$ & $\phantom{-}0.5$ & $\phantom{-}0.000$                    & $\phantom{-}0.500$            \\
+    $w^{(1)}_{12}$ & $-0.5$           & $-0.021$                              & $-0.498$                      \\
+    $b^{(1)}_1$    & $\phantom{-}0.5$ & $-0.021$                              & $\phantom{-}0.502$            \\
     \midrule
-    $w^{(1)}_{21}$ & $\phantom{-}0.5$ & $\phantom{-}0.000$                    & $\phantom{-}0.500$ \\
-    $w^{(1)}_{22}$ & $\phantom{-}0.5$ & $-0.020$                              & $\phantom{-}0.502$ \\
-    $b^{(1)}_2$    & $\phantom{-}0.0$ & $-0.020$                              & $\phantom{-}0.002$ \\
+    $w^{(1)}_{21}$ & $\phantom{-}0.5$ & $\phantom{-}0.000$                    & \sol[2cm]{$\phantom{-}0.500$} \\
+    $w^{(1)}_{22}$ & $\phantom{-}0.5$ & $-0.020$                              & \sol[2cm]{$\phantom{-}0.502$} \\
+    $b^{(1)}_2$    & $\phantom{-}0.0$ & $-0.020$                              & \sol[2cm]{$\phantom{-}0.002$} \\
     \bottomrule
   \end{tabular}
 \end{center}
@@ -471,13 +471,20 @@ training \emph{is}.
   \end{tikzpicture}
 \end{center}
 
-\begin{warnbox}
-  \textbf{One forward--backward pass uses one input.}
-  In practice we cycle through all four XOR inputs (or use mini-batches),
-  average the gradients, and take one update step per batch. After hundreds
-  or thousands of such cycles the network correctly classifies all four
-  XOR inputs.
-\end{warnbox}
+
+Check out the interactive demo.
+\rimg[0.8]{img/2026-11-10-11-12-30.png}{Interactive demo of one forward--backward pass.}
 
 
+% ══════════════════════════════════════════════════════════════════════════════
+\section{XOR Problem}
+
+In practice we cycle through all four XOR inputs,
+average the gradients, and take one update step per batch. After hundreds
+or thousands of such cycles the network correctly classifies all four
+XOR inputs.
+
+Check out the interactive demo.
+
+\rimg[0.8]{img/2026-11-10-11-14-40.png}{Interactive demo of training on the XOR problem. The network learns to classify the XOR inputs correctly.}
 \end{document}
