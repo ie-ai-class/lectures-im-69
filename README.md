@@ -22,6 +22,9 @@
 
 # Feedforward Networks Basics
 
-| Topic       | Exercise                                      | Solution                                       | Resources                                                               |
-| ----------- | --------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------- |
-| XOR Problem | [PDF](/src/T03_ffn_basics/S1/xor_student.pdf) | [PDF](/src/T03_ffn_basics/S1/xor_solution.pdf) | [Notebook](https://molab.marimo.io/notebooks/nb_Y91hwHBhyp1nKnWsBzNk2S) |
+| Topic                   | Exercise                                                   | Solution                                                    | Resources                                                               |
+| ----------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| XOR Problem             | [PDF](/src/T03_ffn_basics/S1/xor_student.pdf)              | [PDF](/src/T03_ffn_basics/S1/xor_solution.pdf)              | [Notebook](https://molab.marimo.io/notebooks/nb_Y91hwHBhyp1nKnWsBzNk2S) |
+| Gradient Descent        | [PDF](/src/T03_ffn_basics/S2/gradient_descent_student.pdf) | [PDF](/src/T03_ffn_basics/S2/gradient_descent_solution.pdf) | [Notebook](#)                                                           |
+| Forward / Backward Pass | [PDF](/src/T03_ffn_basics/S3/forward_backprop_student.pdf) | [PDF](/src/T03_ffn_basics/S3/forward_backprop_solution.pdf) | [Notebook](#)                                                           |
+| MLP                     | [PDF](/src/T03_ffn_basics/S4/mlp_student.pdf)              | [PDF](/src/T03_ffn_basics/S4/mlp_solution.pdf)              | [Notebook](#)                                                           |

@@ -202,19 +202,65 @@ noisy function of $x$, and we fit it with increasingly large networks.
 
 \paragraph{Step 0: No hidden layer.}
 With the input connected straight to a linear output node, the network is
+
 \[
   \yhat = w\,x + b,
 \]
 which is ordinary linear regression with $2$ parameters. A straight line
 cannot follow the bumps.
 
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth]
+    \node (x) at (-1.4, 0) {$x$};
+    \node[input] (In) at (0, 0) {In};
+    \node[neuron, draw=green!50!black, fill=greenbg] (Out) at (3, 0) {Out};
+    \node (yh) at (4.4, 0) {$\yhat$};
+
+    \draw[->, thick] (x) -- (In);
+    \draw[wire, ->] (In) -- (Out);
+    \draw[->, thick] (Out) -- (yh);
+
+    \node[font=\scriptsize, gray!80!black, above=0.25cm of Out] {$w, b$};
+  \end{tikzpicture}
+  \caption{No hidden layer: the input feeds a linear output node directly.}
+\end{figure}
+
+
+
 \rimg[0.8]{img/fit_linear.png}{No hidden layer: $\yhat = wx + b$
   (2 parameters).}
 
 \paragraph{Step 1: One hidden node.}
 Insert one sigmoid node between input and output:
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth]
+    \node (x) at (-1.4, 0) {$x$};
+    \node[input] (In) at (0, 0) {In};
+    \node[neuron] (H1) at (3, 0) {1};
+    \node[neuron, draw=green!50!black, fill=greenbg] (Out) at (6, 0) {Out};
+    \node (yh) at (7.4, 0) {$\yhat$};
+
+    \draw[->, thick] (x) -- (In);
+    \draw[wire, ->] (In) -- (H1);
+    \draw[wire, ->] (H1) -- (Out);
+    \draw[->, thick] (Out) -- (yh);
+
+    \node[font=\scriptsize, gray!80!black, above=0.25cm of H1]
+    {$w^{(1)}, b^{(1)}$};
+    \node[font=\scriptsize, gray!80!black, above=0.25cm of Out]
+    {$w^{(2)}, b^{(2)}$};
+
+    \node[layerlabel] at (3, -1.0) {Hidden layer ($\sigmoid$)};
+  \end{tikzpicture}
+  \caption{One hidden layer with a single sigmoid node and a linear output.}
+\end{figure}
+
 \[
-  \yhat = w^{(2)}\,\sigmoid\!\bigl(w^{(1)} x + b^{(1)}\bigr) + b^{(2)}.
+  \yhat = w^{(2)}\,\sigmoid\!\bigl(w^{(1)} x + b^{(1)}\bigr) + b^{(2)}
+  = \frac{w^{(2)}}{1 + e^{-(w^{(1)} x + b^{(1)})}} + b^{(2)}.
 \]
 Now the fit is a single ``S'' that has been shifted and stretched.
 It follows the overall rise of the data but not the bumps
@@ -261,7 +307,9 @@ Widen the hidden layer to ten nodes:
 The prediction is a \emph{weighted sum of ten S-curves}:
 \[
   \yhat = \sum_{j=1}^{10} w^{(2)}_j\,
-  \sigmoid\!\bigl(w^{(1)}_j x + b^{(1)}_j\bigr) + b^{(2)}.
+  \sigmoid\!\bigl(w^{(1)}_j x + b^{(1)}_j\bigr) + b^{(2)}
+  = \sum_{j=1}^{10} \frac{w^{(2)}_j}{1 + e^{-(w^{(1)}_j x + b^{(1)}_j)}}
+  + b^{(2)}.
 \]
 Each S-curve can sit at a different place and have a different height and
 steepness, so together they can trace the bumps of the data. Count the
@@ -843,21 +891,141 @@ match what the loss function expects:
 \begin{enumerate}
   \item \textbf{How the labels are stored.}
         \begin{itemize}[nosep]
-          \item As \emph{one-hot vectors}: $\by = [0, 0, 1]$.
-          \item As an \emph{integer class index}: $y = 2$ (counting from 0)
-                or $y = 3$ (counting from 1). This saves memory when $C$ is
+          \item As \emph{one-hot vectors}: one row of length $C$ per sample.
+          \item As an \emph{integer class index}: one number per sample,
+                counting the classes from 0. This saves memory when $C$ is
                 large; the loss picks out $p_y$ directly, which is the same
                 number as $\sum_k y_k \log p_k$.
         \end{itemize}
+        Here are three samples ($C = 3$, classes 0, 1, 2) stored both ways:
+        \begin{center}
+          \renewcommand{\arraystretch}{1.25}
+          \begin{tabular}{cccc}
+            \toprule
+            Sample & True class & One-hot label & Integer label \\
+            \midrule
+            1      & 2          & $[0, 0, 1]$   & $2$           \\
+            2      & 0          & $[1, 0, 0]$   & $0$           \\
+            3      & 1          & $[0, 1, 0]$   & $1$           \\
+            \bottomrule
+          \end{tabular}
+        \end{center}
+        For the whole dataset, the one-hot labels form an $n \times C$ matrix
+        (here $3 \times 3$), while the integer labels form a vector of
+        length $n$ (here $[2, 0, 1]$). Both carry exactly the same
+        information.
   \item \textbf{What the network outputs.}
         \begin{itemize}[nosep]
           \item \emph{Probabilities}: the model applies softmax itself,
-                e.g.\ $[0.30, 0.15, 0.55]$.
+                e.g.\ $[0.30, 0.15, 0.55]$. The loss function receives
+                $\bp$ and computes only CCE
+                (Figure~\ref{fig:boundary-probs}).
           \item \emph{Logits}: the model stops at $\bz$,
-                e.g.\ $[1.5, 0.8, 2.1]$, and the loss function applies
-                softmax internally.
+                e.g.\ $[1.5, 0.8, 2.1]$. The loss function receives $\bz$
+                and performs softmax \emph{and} CCE together
+                (Figure~\ref{fig:boundary-logits}).
         \end{itemize}
 \end{enumerate}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, y=1.1cm]
+    % inputs
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3}
+    \node[input] (I\i) at (0,\y) {$x_{\i}$};
+    % hidden block
+    \node[draw=mainblue, fill=boxbg, thick, rounded corners=4pt,
+      minimum width=1.6cm, minimum height=3.4cm, align=center, font=\small]
+    (H) at (2.3, 0) {hidden\\layers};
+    % logits
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3}
+    \node[preact] (Z\i) at (4.6,\y) {$z_{\i}$};
+    \foreach \i in {1,...,3} {
+        \draw[wire, ->] (I\i) -- (H.west |- I\i);
+        \draw[wire, ->] (H.east |- Z\i) -- (Z\i);
+      }
+    % softmax
+    \node[opbox] (SM) at (6.6, 0) {softmax};
+    \foreach \i in {1,...,3} \draw[->, gray] (Z\i) -- (SM.west);
+    % probabilities
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3} {
+        \node (P\i) at (8.5,\y) {$p_{\i}$};
+        \draw[->, gray] (SM.east) -- (P\i);
+      }
+    % loss
+    \node[opbox] (L) at (10.9, 0) {CCE};
+    \foreach \i in {1,...,3} \draw[->, gray] (P\i) -- (L.west);
+    \node (y) at (10.9, -2.7) {$y$};
+    \draw[->, gray] (y) -- (L);
+    \draw[->, thick] (L) -- (12.6, 0) node[right] {$J$};
+
+    % labels
+    \node[layerlabel] at (4.6, -1.6) {logits};
+    \node[layerlabel] at (8.5, -1.6) {probabilities};
+
+    % boundaries
+    \draw[mainblue, dashed, thick, rounded corners=6pt]
+    (-0.6, -2.05) rectangle (9.65, 2.05);
+    \node[above, font=\small\bfseries, text=mainblue] at (4.5, 2.05) {model};
+    \draw[orange!80!black, dashed, thick, rounded corners=6pt]
+    (10.0, -2.05) rectangle (11.8, 2.05);
+    \node[above, font=\small\bfseries, text=orange!80!black]
+    at (10.9, 2.05) {loss function};
+  \end{tikzpicture}
+  \caption{Model outputs \emph{probabilities}. Softmax is part of the model;
+    the loss function receives $\bp$ and computes only CCE.}
+  \label{fig:boundary-probs}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, y=1.1cm]
+    % inputs
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3}
+    \node[input] (I\i) at (0,\y) {$x_{\i}$};
+    % hidden block
+    \node[draw=mainblue, fill=boxbg, thick, rounded corners=4pt,
+      minimum width=1.6cm, minimum height=3.4cm, align=center, font=\small]
+    (H) at (2.3, 0) {hidden\\layers};
+    % logits
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3}
+    \node[preact] (Z\i) at (4.6,\y) {$z_{\i}$};
+    \foreach \i in {1,...,3} {
+        \draw[wire, ->] (I\i) -- (H.west |- I\i);
+        \draw[wire, ->] (H.east |- Z\i) -- (Z\i);
+      }
+    % softmax
+    \node[opbox] (SM) at (6.6, 0) {softmax};
+    \foreach \i in {1,...,3} \draw[->, gray] (Z\i) -- (SM.west);
+    % probabilities
+    \foreach \i [evaluate=\i as \y using {2-\i}] in {1,...,3} {
+        \node (P\i) at (8.5,\y) {$p_{\i}$};
+        \draw[->, gray] (SM.east) -- (P\i);
+      }
+    % loss
+    \node[opbox] (L) at (10.4, 0) {CCE};
+    \foreach \i in {1,...,3} \draw[->, gray] (P\i) -- (L.west);
+    \node (y) at (10.4, -2.7) {$y$};
+    \draw[->, gray] (y) -- (L);
+    \draw[->, thick] (L) -- (12.2, 0) node[right] {$J$};
+
+    % labels
+    \node[layerlabel] at (4.6, -1.6) {logits};
+    \node[layerlabel] at (8.5, -1.6) {probabilities};
+
+    % boundaries
+    \draw[mainblue, dashed, thick, rounded corners=6pt]
+    (-0.6, -2.05) rectangle (5.2, 2.05);
+    \node[above, font=\small\bfseries, text=mainblue] at (2.3, 2.05) {model};
+    \draw[orange!80!black, dashed, thick, rounded corners=6pt]
+    (5.6, -2.05) rectangle (11.4, 2.05);
+    \node[above, font=\small\bfseries, text=orange!80!black]
+    at (8.5, 2.05) {loss function (softmax + CCE)};
+  \end{tikzpicture}
+  \caption{Model outputs \emph{logits}. The model stops at $\bz$; the loss
+    function receives the logits and performs softmax and CCE together.}
+  \label{fig:boundary-logits}
+\end{figure}
 
 \begin{warnbox}
   \textbf{Most libraries prefer logits.} Computing softmax and then $\log$
