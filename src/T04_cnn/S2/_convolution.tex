@@ -1,0 +1,755 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
+
+% ── Local macros ──────────────────────────────────────────────────────────────
+\providecommand{\bZ}{\mathbf{Z}}
+\providecommand{\bdelta}{\boldsymbol{\delta}}
+
+% ── Local TikZ styles (match S1) ──────────────────────────────────────────────
+\usetikzlibrary{decorations.pathreplacing}
+\tikzset{
+  neuron/.style={circle, draw=mainblue, fill=boxbg,
+      minimum size=0.6cm, inner sep=0pt, thick, font=\scriptsize},
+  input/.style={circle, draw=gray!60, fill=gray!15,
+      minimum size=0.6cm, inner sep=0pt, thick, font=\scriptsize},
+  layerlabel/.style={font=\small\itshape, gray},
+  brace/.style={decorate, decoration={brace, amplitude=4pt}, thick, gray},
+  window/.style={draw=orange!80!black, line width=1.6pt},
+  outcell/.style={draw=mainblue, line width=1.6pt},
+}
+
+% \drawgrid{<shift>}{<fill>}{<rows>} — grid of unit cells with values,
+%   rows given as {a,b,c},{d,e,f},... ; row 1 at the top.
+\newcommand{\drawgrid}[3]{%
+  \begin{scope}[shift={#1}]
+    \foreach \row [count=\r] in {#3} {
+        \foreach \v [count=\c] in \row {
+            \draw[gray!70, fill=#2] (\c-1,-\r+1) rectangle ++(1,-1);
+            \node[font=\small] at (\c-0.5,-\r+0.5) {$\v$};
+          }
+      }
+  \end{scope}%
+}
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Section 4.2: The Convolution Operation}} \\[0.3em]
+  {\large\itshape Kernels, Padding, Stride, Channels and Gradients} \\[0.5em]
+  {\large AI-IM Class --- Lecture Notes}%
+  \ifstudentmode
+    \quad {\normalsize\color{gray}[Student Copy]}%
+  \fi
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+In Section 4.1 we slid a small kernel along a signal and saw why this beats
+a fully connected layer for images. In this section we make the operation
+precise and compute it by hand. We
+\begin{itemize}[nosep]
+  \item define convolution in one and two dimensions,
+  \item control the output size with \emph{padding} and \emph{stride},
+  \item handle colour images and many filters (\emph{channels}),
+  \item write convolution as a matrix, connecting it back to the MLP, and
+  \item compute the gradient of the loss with respect to the kernel.
+\end{itemize}
+
+\paragraph{Notation.}
+As in Section 3.4, bold capitals are arrays and lower-case letters are their
+entries. The input is $\bX$ with entries $x_{i,j}$; the kernel is $\bW$ with
+entries $w_{u,v}$; the output (pre-activation) is $\bZ$ with entries
+$z_{i,j}$; $b$ is the bias. The kernel has size $k \times k$. Do not confuse
+the bold kernel $\bW$ with the italic image width $W$.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Convolution in One Dimension}
+
+Let $\bx = (x_1, \dots, x_n)$ be an input of length $n$ and
+$\bw = (w_1, \dots, w_k)$ a kernel of length $k \le n$. Place the kernel at
+position $i$, multiply the overlapping entries, and add:
+
+\begin{resultbox}
+  \[
+    z_i = \sum_{u=1}^{k} w_u\, x_{i+u-1} + b,
+    \qquad i = 1, 2, \dots, n - k + 1.
+  \]
+  The output has length $n - k + 1$.
+\end{resultbox}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.9cm, y=0.9cm, >=Stealth]
+    \drawgrid{(0,0)}{white}{{1,3,2,0,4}}
+    \node[anchor=east, font=\small] at (-0.2,-0.5) {$\bx$};
+    \draw[window] (1,0) rectangle (4,-1);
+
+    \drawgrid{(1,-1.8)}{notebg}{{1,0,-1}}
+    \node[anchor=east, font=\small] at (0.8,-2.3) {$\bw$};
+    \foreach \u in {1,2,3} \draw[->, gray] (\u+0.5,-1.75) -- (\u+0.5,-1.05);
+
+    \drawgrid{(1,-3.6)}{boxbg}{{z_1,z_2,z_3}}
+    \node[anchor=east, font=\small] at (0.8,-4.1) {$\bz$};
+    \draw[outcell] (2,-3.6) rectangle (3,-4.6);
+
+    \node[font=\small, anchor=west, align=left] at (5.6,-2.1)
+    {position $i = 2$:\\
+      $z_2 = (1)(3) + (0)(2) + (-1)(0)$};
+  \end{tikzpicture}
+  \caption{One-dimensional convolution with $n = 5$ and $k = 3$ (bias $b = 0$).
+    The kernel slides one step at a time; the window at position $i = 2$ is
+    outlined.}
+  \label{fig:conv1d}
+\end{figure}
+
+\begin{stepbox}{Exercise 1 \quad A 1-D convolution}
+  Use $\bx = (1, 3, 2, 0, 4)$, $\bw = (1, 0, -1)$ and $b = 0$, as in
+  Figure~\ref{fig:conv1d}.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item The output has length $\sol[3cm]{5 - 3 + 1 = 3}$.
+    \item $z_1 = \sol[4cm]{1 - 2 = -1}$, \quad
+          $z_2 = \sol[3cm]{3 - 0 = 3}$, \quad
+          $z_3 = \sol[3cm]{2 - 4 = -2}$.
+    \item This kernel computes $z_i = x_i - x_{i+2}$. It measures how much the
+          signal $\sol[2.5cm]{\text{decreases}}$ over two steps.
+  \end{enumerate}
+\end{stepbox}
+
+\begin{notebox}
+  \textbf{Convolution or cross-correlation?}
+  In mathematics and signal processing, \emph{convolution} flips the kernel
+  before sliding it:
+  $(x * w)_i = \sum_{u} x_{i-u}\, w_u$. The operation in the box above, which
+  does not flip, is strictly called \textbf{cross-correlation}.
+  With the flipped kernel $(-1, 0, 1)$, Exercise 1 would give
+  $\bz = (1, -3, 2)$: the same numbers with opposite sign.
+
+  In a CNN the kernel values are \emph{learned}. If the flipped version is
+  better, training simply learns the flipped numbers, so the choice makes no
+  difference. Deep-learning libraries, including PyTorch's
+  \texttt{nn.Conv1d} and \texttt{nn.Conv2d}, compute cross-correlation and
+  call it convolution. We do the same.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Convolution in Two Dimensions}
+
+For an image the kernel is a small $k \times k$ grid that slides across both
+rows and columns. At each position we multiply the kernel entrywise with the
+$k \times k$ patch beneath it and add everything up.
+
+\begin{resultbox}
+  \[
+    z_{i,j} = \sum_{u=1}^{k} \sum_{v=1}^{k} w_{u,v}\; x_{i+u-1,\; j+v-1} + b .
+  \]
+  For an $H \times W$ input the output is
+  $(H - k + 1) \times (W - k + 1)$.
+\end{resultbox}
+
+The output is called a \textbf{feature map}: entry $z_{i,j}$ says how
+strongly the pattern in the kernel is present in the patch whose top-left
+corner is pixel $(i, j)$.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.72cm, y=0.72cm, >=Stealth]
+    \drawgrid{(0,0)}{white}{{0,0,0,0,0},{0,0,0,0,0},{0,0,1,1,1},{0,0,1,1,1},{0,0,1,1,1}}
+    \fill[orange!20, opacity=0.6] (0,0) rectangle (3,-3);
+    \draw[window] (0,0) rectangle (3,-3);
+    \node[layerlabel] at (2.5,-5.6) {input $\bX$ ($5\times5$)};
+
+    \node[font=\Large] at (6.0,-2.5) {$\ast$};
+
+    \drawgrid{(7,-1)}{notebg}{{-1,0,1},{-1,0,1},{-1,0,1}}
+    \node[layerlabel, align=center] at (8.5,-4.9) {kernel $\bW_{\!v}$\\($3\times3$)};
+
+    \node[font=\Large] at (11.0,-2.5) {$=$};
+
+    \drawgrid{(12,-1)}{boxbg}{{z_{1,1},z_{1,2},z_{1,3}},{z_{2,1},z_{2,2},z_{2,3}},{z_{3,1},z_{3,2},z_{3,3}}}
+    \draw[outcell] (12,-1) rectangle (13,-2);
+    \node[layerlabel, align=center] at (13.5,-4.9) {feature map $\bZ$\\($3\times3$)};
+
+    \draw[->, orange!80!black, thick] (3,0) to[bend left=20] (12.5,-0.95);
+  \end{tikzpicture}
+  \caption{Two-dimensional convolution. The input contains a bright square in
+    its lower-right corner. The outlined $3\times3$ patch, multiplied entrywise
+    by the kernel and summed, gives $z_{1,1}$. Sliding the patch one column
+    right gives $z_{1,2}$, and so on.}
+  \label{fig:conv2d}
+\end{figure}
+
+\begin{stepbox}{Exercise 2 \quad Detecting edges by hand}
+  Use the input $\bX$ of Figure~\ref{fig:conv2d} with $b = 0$ and two
+  kernels:
+  \[
+    \bW_{\!v} =
+    \begin{pmatrix} -1 & 0 & 1 \\ -1 & 0 & 1 \\ -1 & 0 & 1 \end{pmatrix},
+    \qquad
+    \bW_{\!h} =
+    \begin{pmatrix} -1 & -1 & -1 \\ 0 & 0 & 0 \\ 1 & 1 & 1 \end{pmatrix}.
+  \]
+  $\bW_{\!v}$ computes (right column of the patch) $-$ (left column);
+  $\bW_{\!h}$ computes (bottom row) $-$ (top row).
+  \[
+    \bZ_v =
+    \begin{pmatrix}
+      \sol[0.6cm]{1} & \sol[0.6cm]{1} & \sol[0.6cm]{0} \\[2pt]
+      \sol[0.6cm]{2} & \sol[0.6cm]{2} & \sol[0.6cm]{0} \\[2pt]
+      \sol[0.6cm]{3} & \sol[0.6cm]{3} & \sol[0.6cm]{0}
+    \end{pmatrix},
+    \qquad
+    \bZ_h =
+    \begin{pmatrix}
+      \sol[0.6cm]{1} & \sol[0.6cm]{2} & \sol[0.6cm]{3} \\[2pt]
+      \sol[0.6cm]{1} & \sol[0.6cm]{2} & \sol[0.6cm]{3} \\[2pt]
+      \sol[0.6cm]{0} & \sol[0.6cm]{0} & \sol[0.6cm]{0}
+    \end{pmatrix}
+  \]
+  Where in the image is $\bZ_v$ largest, and why?
+  \soleq[1.2cm]{\parbox{0.85\linewidth}{\raggedright Bottom-left: those
+      patches contain the whole vertical edge of the square (dark on the left,
+      bright on the right, in all three rows).}}
+\end{stepbox}
+
+The two kernels respond to different features of the \emph{same} image:
+$\bW_{\!v}$ to the left (vertical) edge of the square, $\bW_{\!h}$ to its
+top (horizontal) edge. Inside the square, where the image is flat, both are
+zero.
+
+\begin{notebox}
+  \textbf{Hand-designed vs.\ learned kernels.}
+  $\bW_{\!v}$ and $\bW_{\!h}$ are classical image-processing filters (the
+  \emph{Prewitt} filters), designed by hand. In a CNN the nine numbers in each
+  kernel are \emph{parameters}, found by gradient descent like any other
+  weight. When we look at the kernels a trained CNN learned in its first
+  layer, many turn out to be edge and colour detectors very much like these.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Padding}
+
+Without help, every convolution shrinks the input: a $3 \times 3$ kernel
+removes one pixel from each border, so a $28 \times 28$ image becomes
+$26 \times 26$, then $24 \times 24$, and so on. Pixels on the border are also
+covered by fewer windows than pixels in the middle, so the network sees them
+less.
+
+The fix is \textbf{padding}: surround the input with $p$ rows and columns of
+zeros before convolving.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.6cm, y=0.6cm]
+    \foreach \r in {1,...,6} \foreach \c in {1,...,6} {
+          \pgfmathtruncatemacro{\border}{(\r==1)||(\r==6)||(\c==1)||(\c==6)}
+          \ifnum\border=1
+            \draw[gray!60, fill=gray!15] (\c-1,-\r+1) rectangle ++(1,-1);
+            \node[font=\scriptsize, gray] at (\c-0.5,-\r+0.5) {0};
+          \else
+            \draw[gray!70, fill=white] (\c-1,-\r+1) rectangle ++(1,-1);
+            \node[font=\scriptsize] at (\c-0.5,-\r+0.5) {$x$};
+          \fi
+        }
+    \draw[thick] (1,-1) rectangle (5,-5);
+    \draw[window] (0,0) rectangle (3,-3);
+    \node[layerlabel, align=center] at (3,-6.9)
+    {$4\times4$ input, $p = 1$\\(padded to $6\times6$)};
+
+    \draw[->, thick, >=Stealth] (6.8,-3) -- node[above, font=\small]
+    {$3\times3$ kernel} (10.2,-3);
+
+    \foreach \r in {1,...,4} \foreach \c in {1,...,4}
+    \draw[gray!70, fill=boxbg] (\c+10.5,-\r) rectangle ++(1,-1);
+    \draw[outcell] (11.5,-1) rectangle (12.5,-2);
+    \node[layerlabel, align=center] at (13.5,-6.9) {$4\times4$ output\\(same size)};
+  \end{tikzpicture}
+  \caption{Zero padding with $p = 1$. The first window (orange) is centred on
+    the corner pixel, so the corner now gets its own output, and the output
+    has the same size as the input.}
+  \label{fig:padding}
+\end{figure}
+
+Padding adds $2p$ to each dimension, so the output length becomes
+$n + 2p - k + 1$. Three choices of $p$ have names.
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.4}
+  \begin{tabular}{llll}
+    \toprule
+    Type  & Padding $p$          & Output length & Use                       \\
+    \midrule
+    Valid & $0$                  & $n - k + 1$   & shrinks; common           \\
+    Same  & $(k-1)/2$ ($k$ odd)  & $n$           & keeps size; most common   \\
+    Full  & $k - 1$              & $n + k - 1$   & grows; rare in CNNs       \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+Same padding is the reason almost all CNN kernels have \emph{odd} size
+($3\times3$, $5\times5$, $7\times7$): then $(k-1)/2$ is a whole number and the
+kernel has a centre pixel. In PyTorch, \texttt{padding=0} is valid padding,
+and \texttt{padding=1} with a $3 \times 3$ kernel (or
+\texttt{padding="same"}) is same padding.
+
+\begin{stepbox}{Exercise 3 \quad Same padding in 1-D}
+  Repeat Exercise 1 ($\bx = (1, 3, 2, 0, 4)$, $\bw = (1, 0, -1)$) with same
+  padding.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item $p = \sol[1cm]{1}$; the padded input is
+          $\sol[5cm]{(0,\ 1,\ 3,\ 2,\ 0,\ 4,\ 0)}$.
+    \item $\bz = \bigl(\,\sol[0.9cm]{-3},\ \sol[0.9cm]{-1},\ \sol[0.9cm]{3},\
+            \sol[0.9cm]{-2},\ \sol[0.9cm]{0}\,\bigr)$, of length
+          $\sol[1cm]{5}$.
+    \item Compare with Exercise 1: the middle three outputs are
+          $\sol[5cm]{\text{the same values } (-1, 3, -2)}$; padding only adds
+          outputs at the borders.
+  \end{enumerate}
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Stride}
+
+So far the kernel has moved one step at a time. With \textbf{stride} $s$ it
+moves $s$ steps, so only every $s$-th output is computed. A stride of $2$
+roughly halves the output in each dimension. This reduces computation and,
+as noted in Section 4.1, makes the receptive field of later layers grow
+faster.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.85cm, y=0.85cm]
+    \drawgrid{(0,0)}{white}{{0,1,3,2,0,4,0}}
+    \foreach \a in {0,6} {
+        \filldraw[fill=gray!15, draw=gray!70] (\a,0) rectangle ++(1,-1);
+        \node[font=\small, gray] at (\a+0.5,-0.5) {$0$};
+      }
+    \foreach \a/\col/\h in {0/orange!80!black/0.25, 2/mainblue/0.55,
+        4/green!50!black/0.85} {
+        \draw[\col, line width=1.4pt] (\a+0.08, \h) -- (\a+0.08, \h+0.15)
+        -- (\a+2.92, \h+0.15) -- (\a+2.92, \h);
+      }
+    \node[layerlabel, anchor=west] at (7.3,-0.5) {padded input ($p = 1$)};
+    \node[font=\small, anchor=west] at (7.3,0.6) {windows start at $1, 3, 5$};
+
+    \drawgrid{(2,-1.8)}{boxbg}{{z_1,z_2,z_3}}
+    \node[layerlabel, anchor=west] at (7.3,-2.3) {output with $s = 2$};
+  \end{tikzpicture}
+  \caption{Stride $s = 2$: the kernel of width $3$ jumps two positions at a
+    time, giving three outputs instead of five.}
+  \label{fig:stride}
+\end{figure}
+
+Combining padding and stride gives the general output-size formula. In two
+dimensions it is applied to the height and the width separately.
+
+\begin{resultbox}
+  For input size $n$, kernel size $k$, padding $p$ and stride $s$:
+  \[
+    n_{\text{out}} = \left\lfloor \frac{n + 2p - k}{s} \right\rfloor + 1 .
+  \]
+  The floor $\lfloor\cdot\rfloor$ rounds down: a window that would stick out
+  past the padded input is dropped.
+\end{resultbox}
+
+\begin{stepbox}{Exercise 4 \quad Output sizes}
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item Exercise 3 with stride $s = 2$:
+          $n_{\text{out}} = \sol[4cm]{\lfloor (5 + 2 - 3)/2 \rfloor + 1 = 3}$,
+          and $\bz = \bigl(\,\sol[0.9cm]{-3},\ \sol[0.9cm]{3},\
+            \sol[0.9cm]{0}\,\bigr)$.
+    \item Complete the table.
+  \end{enumerate}
+  \begin{center}
+    \renewcommand{\arraystretch}{1.4}
+    \begin{tabular}{ccccc}
+      \toprule
+      Input $n$ & Kernel $k$ & Padding $p$ & Stride $s$ & Output $n_{\text{out}}$ \\
+      \midrule
+      10        & 5          & 2           & 1          & $\sol[1.2cm]{10}$       \\
+      10        & 3          & 2           & 2          & $\sol[1.2cm]{6}$        \\
+      28        & 5          & 0           & 1          & $\sol[1.2cm]{24}$       \\
+      32        & 3          & 1           & 1          & $\sol[1.2cm]{32}$       \\
+      7         & 3          & 0           & 2          & $\sol[1.2cm]{3}$        \\
+      224       & 7          & 3           & 2          & $\sol[1.2cm]{112}$      \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  The last row is the first layer of ResNet (Section 4.4).
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Channels}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Multiple Input Channels}
+
+A colour image has $C_{\text{in}} = 3$ channels. A kernel for it is not a
+flat $k \times k$ grid but a \emph{stack} of $C_{\text{in}}$ grids, one per
+channel, so its shape is $(C_{\text{in}}, k, k)$. Each slice is convolved with
+its own channel, and the results are \textbf{added} together with one bias.
+The kernel slides only across height and width, never across channels, so the
+output is a \emph{single} feature map.
+
+\begin{resultbox}
+  \[
+    z_{i,j} = \sum_{c=1}^{C_{\text{in}}} \sum_{u=1}^{k} \sum_{v=1}^{k}
+    w_{c,u,v}\; x_{c,\; i+u-1,\; j+v-1} + b .
+  \]
+\end{resultbox}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.5cm, y=0.5cm, >=Stealth]
+    % input channels
+    \foreach \col/\s in {blue/2, green!60!black/1, red/0} {
+        \filldraw[fill=\col!15, draw=\col!80!black, thick]
+        (0.6*\s, 0.6*\s) rectangle ++(5,-5);
+      }
+    \filldraw[fill=orange!30, draw=orange!80!black, thick] (0,0) rectangle (2,-2);
+    \node[layerlabel, align=center] at (3,-6.4) {input\\$(C_{\text{in}}, H, W)$};
+
+    % kernel slices
+    \begin{scope}[xshift=4.6cm, yshift=-0.5cm]
+      \foreach \col/\s in {blue/2, green!60!black/1, red/0} {
+          \filldraw[fill=\col!35, draw=\col!80!black, thick]
+          (0.6*\s, 0.6*\s) rectangle ++(2,-2);
+        }
+      \node[layerlabel, align=center] at (1.6,-5.4)
+      {one filter\\$(C_{\text{in}}, k, k)$};
+    \end{scope}
+    \node[font=\Large] at (8.6,-1.8) {$\ast$};
+
+    % sum
+    \node[circle, draw=mainblue, thick, minimum size=0.8cm] (S) at (18,-1.8)
+    {$\Sigma$};
+    \node[font=\small] at (18,-0.4) {$+\,b$};
+    \draw[->, thick] (13.2,-1.8) -- node[above, font=\scriptsize, align=center]
+    {multiply \& add\\per channel} (S);
+
+    % output
+    \filldraw[fill=boxbg, draw=mainblue, thick] (20.5,0.2) rectangle ++(4,-4);
+    \fill[mainblue!50] (20.5,0.2) rectangle ++(1,-1);
+    \draw[->, thick] (S) -- (20.5,-1.8);
+    \node[layerlabel, align=center] at (22.5,-4.9) {one feature map\\$(H', W')$};
+  \end{tikzpicture}
+  \caption{A filter has one $k \times k$ slice per input channel. Each slice
+    meets its own channel; all products are added, plus one bias, to give one
+    entry of a single output feature map.}
+  \label{fig:channels}
+\end{figure}
+
+\begin{stepbox}{Exercise 5 \quad Two input channels}
+  An input has two channels and a filter has two $2 \times 2$ slices, with
+  bias $b = 1$ and no padding:
+  \[
+    \bX_1 = \begin{pmatrix} 1 & 0 & 2 \\ 3 & 1 & 0 \\ 0 & 2 & 1 \end{pmatrix},\;
+    \bX_2 = \begin{pmatrix} 0 & 1 & 1 \\ 2 & 0 & 1 \\ 1 & 1 & 0 \end{pmatrix},
+    \qquad
+    \bW_1 = \begin{pmatrix} 1 & -1 \\ 0 & 2 \end{pmatrix},\;
+    \bW_2 = \begin{pmatrix} 0 & 1 \\ 1 & 0 \end{pmatrix}.
+  \]
+  Compute each channel's contribution, then add them and the bias.
+  \[
+    \underbrace{\begin{pmatrix}
+        \sol[0.6cm]{3} & \sol[0.6cm]{-2} \\[2pt]
+        \sol[0.6cm]{6} & \sol[0.6cm]{3}
+      \end{pmatrix}}_{\bX_1 \ast \bW_1}
+    +
+    \underbrace{\begin{pmatrix}
+        \sol[0.6cm]{3} & \sol[0.6cm]{1} \\[2pt]
+        \sol[0.6cm]{1} & \sol[0.6cm]{2}
+      \end{pmatrix}}_{\bX_2 \ast \bW_2}
+    + 1
+    =
+    \underbrace{\begin{pmatrix}
+        \sol[0.6cm]{7} & \sol[0.6cm]{0} \\[2pt]
+        \sol[0.6cm]{8} & \sol[0.6cm]{6}
+      \end{pmatrix}}_{\bZ}
+  \]
+\end{stepbox}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Multiple Filters}
+
+One filter detects one kind of feature. A convolutional layer uses
+$C_{\text{out}}$ filters, each with its own weights and bias, and stacks the
+$C_{\text{out}}$ feature maps into an output with $C_{\text{out}}$
+\emph{channels}. That output is the input of the next layer, which is why its
+filters need $C_{\text{in}}$ equal to the previous layer's $C_{\text{out}}$.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.45cm, y=0.45cm, >=Stealth]
+    \foreach \s in {2,1,0}
+    \filldraw[fill=gray!12, draw=gray!70!black, thick]
+    (0.6*\s, 0.6*\s) rectangle ++(5,-5);
+    \node[layerlabel, align=center] at (3,-6.6) {input\\$(3, H, W)$};
+
+    \foreach \f/\col/\y in {1/red/2.6, 2/mainblue/-1.0, 3/green!50!black/-4.6} {
+        \begin{scope}[xshift=4.6cm, yshift=\y*0.45cm]
+          \foreach \s in {2,1,0}
+          \filldraw[fill=\col!25, draw=\col!80!black]
+          (0.4*\s, 0.4*\s) rectangle ++(1.6,-1.6);
+        \end{scope}
+        \draw[->, \col!80!black, thick] (13.4, \y-0.6) -- (19.6, -0.6-0.5*\f);
+      }
+    \node[layerlabel, align=center] at (11.7,-8.3)
+    {$C_{\text{out}} = 3$ filters, each $(3, k, k)$};
+
+    \foreach \col/\s in {green!50!black/2, mainblue/1, red/0}
+    \filldraw[fill=\col!15, draw=\col!80!black, thick]
+    (20+0.6*\s, 0.6*\s) rectangle ++(4,-4);
+    \node[layerlabel, align=center] at (22.6,-6.6) {output\\$(3, H', W')$};
+  \end{tikzpicture}
+  \caption{A layer with $C_{\text{out}} = 3$ filters produces an output with
+    three channels: one feature map per filter.}
+  \label{fig:filters}
+\end{figure}
+
+\begin{resultbox}
+  A convolutional layer with $C_{\text{in}}$ input channels, $C_{\text{out}}$
+  filters and kernel size $k \times k$ has
+  \begin{itemize}[nosep]
+    \item a weight tensor of shape $(C_{\text{out}}, C_{\text{in}}, k, k)$,
+    \item a bias vector of shape $(C_{\text{out}})$,
+  \end{itemize}
+  \[
+    \#\text{parameters} = (C_{\text{in}} \cdot k \cdot k + 1)\; C_{\text{out}} .
+  \]
+  The count does \emph{not} depend on the height or width of the image.
+\end{resultbox}
+
+Compare this with the MLP formula $(n_{\ell-1} + 1)\,n_\ell$: one filter
+plays the role of one node, and its $C_{\text{in}} k^2$ weights are its
+inputs. The difference is that the same filter is reused at every position.
+
+\begin{codebox}
+import torch
+import torch.nn as nn
+
+conv = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=5)
+x = torch.randn(64, 3, 32, 32)      # a batch of 64 colour images
+
+print(conv.weight.shape)   # torch.Size([32, 3, 5, 5])
+print(conv.bias.shape)     # torch.Size([32])
+print(conv(x).shape)       # torch.Size([64, 32, 28, 28])
+\end{codebox}
+
+\begin{stepbox}{Exercise 6 \quad Shapes and parameters}
+  A batch of colour images of size $32 \times 32$ passes through two
+  convolutional layers (stride $1$).
+  \begin{center}
+    \renewcommand{\arraystretch}{1.4}
+    \begin{tabular}{lccc}
+      \toprule
+      Layer                          & Weight shape                    & Parameters               & Output shape               \\
+      \midrule
+      Input                          & ---                             & ---                      & $(3, 32, 32)$              \\
+      32 filters $5\times5$, valid   & $\sol[2.4cm]{(32, 3, 5, 5)}$    & $\sol[1.8cm]{2\,432}$    & $\sol[2.4cm]{(32, 28, 28)}$ \\
+      64 filters $3\times3$, same    & $\sol[2.4cm]{(64, 32, 3, 3)}$   & $\sol[1.8cm]{18\,496}$   & $\sol[2.4cm]{(64, 28, 28)}$ \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  A dense layer mapping the same input ($3 \cdot 32 \cdot 32$ values) to the
+  same first output ($32 \cdot 28 \cdot 28$ values) would need
+  \[
+    (3072 + 1) \times 25\,088 = \sol[4cm]{77\,095\,424}
+    \ \text{parameters,}
+  \]
+  about $\sol[2.5cm]{32\,000}$ times as many as the first convolution.
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Convolution Is a Constrained Dense Layer}
+
+A convolution is linear in its input, so, like any linear map, it can be
+written as a matrix--vector product $\bz = \bW \bx$, exactly as in a fully
+connected layer (Section 3.4). The matrix just has a special form.
+
+\begin{stepbox}{Exercise 7 \quad Write the convolution as a matrix}
+  Take $\bx = (x_1, \dots, x_5)$ and $\bw = (w_1, w_2, w_3)$, valid
+  padding and no bias. Fill in the matrix so that $\bz = \bW \bx$ gives
+  $z_i = w_1 x_i + w_2 x_{i+1} + w_3 x_{i+2}$.
+  \[
+    \begin{pmatrix} z_1 \\ z_2 \\ z_3 \end{pmatrix}
+    =
+    \begin{pmatrix}
+      \sol[0.6cm]{w_1} & \sol[0.6cm]{w_2} & \sol[0.6cm]{w_3} & \sol[0.6cm]{0}   & \sol[0.6cm]{0}   \\[2pt]
+      \sol[0.6cm]{0}   & \sol[0.6cm]{w_1} & \sol[0.6cm]{w_2} & \sol[0.6cm]{w_3} & \sol[0.6cm]{0}   \\[2pt]
+      \sol[0.6cm]{0}   & \sol[0.6cm]{0}   & \sol[0.6cm]{w_1} & \sol[0.6cm]{w_2} & \sol[0.6cm]{w_3}
+    \end{pmatrix}
+    \begin{pmatrix} x_1 \\ x_2 \\ x_3 \\ x_4 \\ x_5 \end{pmatrix}
+  \]
+\end{stepbox}
+
+A general dense layer from $5$ inputs to $3$ outputs has $15$ free weights.
+The convolution matrix has only $3$, arranged in two kinds of constraint:
+\begin{itemize}[nosep]
+  \item \textbf{Zeros} outside a band: each output sees only its receptive
+        field (sparse interactions).
+  \item \textbf{Repeated entries} along each diagonal: every row is the row
+        above shifted one place right (parameter sharing).
+\end{itemize}
+So a convolutional layer is a fully connected layer whose weights are forced
+to obey these constraints. Goodfellow et al.\ call this an
+\emph{infinitely strong prior}: before seeing any data, we decide that the
+useful features are local and the same everywhere. For images this belief is
+correct, and that is why CNNs learn from far less data than MLPs.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Learning the Kernel: Backpropagation}
+
+The kernel weights are learned by gradient descent, so we need
+$\partial J / \partial w_u$. The matrix view tells us how: weight $w_u$
+appears in \emph{every} row, once per output position. In Section 3.3 each
+weight affected the loss along one path. Here $w_u$ affects the loss through
+every $z_i$, and the chain rule adds up all the paths.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=1.4cm, y=1.6cm, >=Stealth]
+    \foreach \i in {1,...,4} \node[input] (x\i) at (\i, 0) {$x_{\i}$};
+    \foreach \j in {1,...,3} \node[neuron] (z\j) at (\j+0.5, 1) {$z_{\j}$};
+    \node (J) at (2.5, 2) {$J$};
+    \foreach \j in {1,...,3} {
+        \pgfmathtruncatemacro{\ja}{\j+1}
+        \draw[red!70!black, line width=1.3pt] (z\j) -- (x\j);
+        \draw[gray!50, line width=0.6pt] (z\j) -- (x\ja);
+        \draw[->, gray] (z\j) -- (J);
+      }
+    \node[font=\scriptsize, red!70!black, anchor=east] at (0.6, 0.5)
+    {$w_1$ (red) is used three times};
+    \node[font=\scriptsize, gray, anchor=west] at (4.4, 0.5)
+    {$w_2$ (gray)};
+    \foreach \j in {1,...,3}
+    \node[font=\scriptsize, mainblue] at (\j+0.15, 1.45) {$\delta_{\j}$};
+  \end{tikzpicture}
+  \caption{A kernel of width $2$ on an input of length $4$. Weight $w_1$
+    connects $x_1 \to z_1$, $x_2 \to z_2$ and $x_3 \to z_3$, so its gradient
+    collects one term from each output.}
+  \label{fig:backprop}
+\end{figure}
+
+Write $\delta_i = \partial J / \partial z_i$ for the gradient arriving at
+output $i$ from later layers (as in Section 3.3). Since
+$z_i = \sum_u w_u x_{i+u-1} + b$, we have
+$\partial z_i / \partial w_u = x_{i+u-1}$ and $\partial z_i / \partial b = 1$.
+The chain rule, summed over all outputs, gives:
+
+\begin{resultbox}
+  \[
+    \pd{J}{w_u} = \sum_{i} \delta_i\; x_{i+u-1},
+    \qquad
+    \pd{J}{b} = \sum_{i} \delta_i .
+  \]
+  The gradient of a shared weight is the \textbf{sum} of the gradients from
+  every position where it is used. Notice that
+  $\partial J / \partial w_u$ is itself a convolution: slide $\bdelta$ along
+  $\bx$.
+\end{resultbox}
+
+\begin{stepbox}{Exercise 8 \quad One gradient-descent step on a kernel}
+  Let $\bx = (1, 2, -1, 3)$, $\bw = (w_1, w_2) = (1, -1)$ and $b = 0$. The
+  desired output is $\by = (0, 2, -3)$, and the loss is
+  $J = \tfrac{1}{2}\sum_i (z_i - y_i)^2$, so $\delta_i = z_i - y_i$.
+  \begin{enumerate}[label=(\alph*)]
+    \item Forward pass:
+          $\bz = \bigl(\,\sol[0.9cm]{-1},\ \sol[0.9cm]{3},\ \sol[0.9cm]{-4}\,\bigr)$
+          \quad and \quad
+          $J = \sol[3cm]{\tfrac12(1 + 1 + 1) = 1.5}$.
+    \item Output gradients:
+          $\bdelta = \bigl(\,\sol[0.9cm]{-1},\ \sol[0.9cm]{1},\ \sol[0.9cm]{-1}\,\bigr)$.
+    \item Kernel and bias gradients:
+          \begin{align*}
+            \pd{J}{w_1} & = \delta_1 x_1 + \delta_2 x_2 + \delta_3 x_3
+            = \sol[5cm]{-1 + 2 + 1 = 2}                                 \\
+            \pd{J}{w_2} & = \delta_1 x_2 + \delta_2 x_3 + \delta_3 x_4
+            = \sol[5cm]{-2 - 1 - 3 = -6}                                \\
+            \pd{J}{b}   & = \delta_1 + \delta_2 + \delta_3 = \sol[5cm]{-1}
+          \end{align*}
+    \item Update with learning rate $\eta = 0.1$:
+          $w_1 = \sol[1.3cm]{0.8}$, \ $w_2 = \sol[1.3cm]{-0.4}$, \
+          $b = \sol[1.3cm]{0.1}$.
+    \item New forward pass:
+          $\bz = \bigl(\,\sol[0.9cm]{0.1},\ \sol[0.9cm]{2.1},\ \sol[0.9cm]{-1.9}\,\bigr)$
+          and $J = \sol[1.5cm]{0.615}$. The loss went
+          $\sol[1.5cm]{\text{down}}$.
+  \end{enumerate}
+\end{stepbox}
+
+PyTorch reproduces these numbers with automatic differentiation:
+
+\begin{codebox}
+conv = nn.Conv1d(in_channels=1, out_channels=1, kernel_size=2)
+with torch.no_grad():
+    conv.weight[:] = torch.tensor([[[1., -1.]]])
+    conv.bias.zero_()
+
+x = torch.tensor([[[1., 2., -1., 3.]]])   # shape (N, C, length)
+y = torch.tensor([[[0., 2., -3.]]])
+J = 0.5 * ((conv(x) - y) ** 2).sum()
+J.backward()
+print(conv.weight.grad)    # tensor([[[ 2., -6.]]])
+print(conv.bias.grad)      # tensor([-1.])
+\end{codebox}
+
+\begin{notebox}
+  \textbf{Gradient with respect to the input.}
+  To keep backpropagating to earlier layers we also need
+  $\partial J / \partial x_j = \sum_i \delta_i\, w_{j-i+1}$, summed over the
+  outputs whose window contains $x_j$. This turns out to be a \emph{full}
+  convolution of $\bdelta$ with the \emph{flipped} kernel: the flip we
+  avoided earlier comes back in the backward pass. Frameworks compute it for
+  us; the important idea is the one in the box above. Shared weights
+  \emph{add} their gradients.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Summary}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.5}
+  \begin{tabular}{ll}
+    \toprule
+    Quantity               & Formula                                                                                \\
+    \midrule
+    1-D convolution        & $z_i = \sum_{u} w_u\, x_{i+u-1} + b$                                                   \\
+    2-D, many channels     & $z_{i,j} = \sum_{c}\sum_{u}\sum_{v} w_{c,u,v}\, x_{c,\,i+u-1,\,j+v-1} + b$              \\
+    Output size            & $n_{\text{out}} = \lfloor (n + 2p - k)/s \rfloor + 1$                                 \\
+    Same padding           & $p = (k-1)/2$                                                                          \\
+    Parameters of a layer  & $(C_{\text{in}} k^2 + 1)\, C_{\text{out}}$                                             \\
+    Kernel gradient        & $\partial J / \partial w_u = \sum_i \delta_i\, x_{i+u-1}$                              \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\begin{itemize}
+  \item A convolution slides a kernel over the input and takes a weighted sum
+        at each position. Deep learning uses the unflipped version
+        (cross-correlation).
+  \item Padding controls whether the output shrinks (valid) or keeps its size
+        (same). Stride $s$ skips positions and shrinks the output about
+        $s$-fold.
+  \item A filter has one slice per input channel; a layer has $C_{\text{out}}$
+        filters and produces $C_{\text{out}}$ feature maps. Weights in PyTorch
+        have shape $(C_{\text{out}}, C_{\text{in}}, k, k)$.
+  \item A convolution is a dense layer with a banded, repeated weight matrix.
+  \item The gradient of a shared weight is the sum over every position where
+        it is used.
+\end{itemize}
+
+\paragraph{Coming up.}
+Section 4.3 adds the remaining building blocks (activation, pooling and the
+classifier head) and assembles a complete CNN.
+
+\end{document}

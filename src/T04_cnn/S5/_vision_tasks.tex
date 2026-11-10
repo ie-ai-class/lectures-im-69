@@ -1,0 +1,552 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
+
+% ── Local TikZ styles (match S1–S4) ───────────────────────────────────────────
+\usetikzlibrary{decorations.pathreplacing}
+\tikzset{
+  layerlabel/.style={font=\small\itshape, gray},
+  opbox/.style={draw=orange!70!black, fill=notebg, thick, rounded corners=4pt,
+      minimum height=0.9cm, minimum width=1.9cm, font=\small, align=center},
+  frame/.style={draw=gray!70, fill=gray!8, thick},
+  bbox/.style={line width=1.3pt},
+  brace/.style={decorate, decoration={brace, amplitude=4pt}, thick, gray},
+}
+
+% \scene{<nut1 style>}{<nut2 style>}{<bolt style>} — toy image: two nuts, one bolt
+\newcommand{\scene}[3]{%
+  \draw[frame] (0,0) rectangle (3.2,2.6);
+  \filldraw[#1] (0.9,1.0) circle (0.45);
+  \filldraw[#2] (2.3,1.85) circle (0.4);
+  \filldraw[#3] (1.7,0.35) rectangle (2.9,0.75);
+}
+
+% \cuboid{<x>}{<depth>}{<height>}{<color>}{<label>} (as in S3/S4)
+\newcommand{\cuboid}[5]{%
+  \pgfmathsetmacro{\off}{#3*0.3}
+  \filldraw[fill=#4!20, draw=#4!80!black] (#1,-#3/2) rectangle ++(#2,#3);
+  \filldraw[fill=#4!35, draw=#4!80!black]
+  (#1,#3/2) -- ++(\off,\off) -- ++(#2,0) -- ++(-\off,-\off) -- cycle;
+  \filldraw[fill=#4!50, draw=#4!80!black]
+  (#1+#2,-#3/2) -- ++(\off,\off) -- ++(0,#3) -- ++(-\off,-\off) -- cycle;
+  \node[below, font=\scriptsize, align=center] at (#1+#2/2,-1.6) {#5};
+}
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Section 4.5: Beyond Classification}} \\[0.3em]
+  {\large\itshape Object Detection, Segmentation and OCR --- an Overview} \\[0.5em]
+  {\large AI-IM Class --- Lecture Notes}%
+  \ifstudentmode
+    \quad {\normalsize\color{gray}[Student Copy]}%
+  \fi
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+So far a CNN has answered one question per image: \emph{what is in it?}
+Many real problems need more. A robot must know \emph{where} each part lies; an
+inspection system must outline the scratch, not only report that there is
+one; a traceability system must \emph{read} the serial number. The same
+convolutional feature extractor (Sections 4.2--4.4) handles all of these. Only
+the head and the loss change. This section is an overview; the details of
+modern detectors and text recognisers are left to an advanced topic. We
+\begin{itemize}[nosep]
+  \item compare the main computer-vision tasks,
+  \item learn the basic tools of object detection (boxes, IoU, non-maximum
+        suppression) and the idea behind YOLO,
+  \item see how segmentation predicts a class for every pixel,
+  \item outline how OCR reads text, and
+  \item map these tasks to manufacturing applications.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{A Family of Vision Tasks}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[scale=0.95]
+    % (a) classification
+    \begin{scope}
+      \draw[frame] (0,0) rectangle (3.2,2.6);
+      \filldraw[fill=gray!45, draw=gray!80!black] (1.6,1.3) circle (0.7);
+      \filldraw[fill=gray!8, draw=gray!80!black] (1.6,1.3) circle (0.3);
+      \node[font=\small] at (1.6,-0.35) {label: \texttt{nut}};
+      \node[font=\small\bfseries] at (1.6,-0.95) {(a) classification};
+    \end{scope}
+    % (b) detection
+    \begin{scope}[xshift=3.7cm]
+      \scene{fill=gray!45, draw=gray!80!black}{fill=gray!45, draw=gray!80!black}
+      {fill=gray!45, draw=gray!80!black}
+      \draw[bbox, mainblue] (0.4,0.5) rectangle (1.4,1.5);
+      \draw[bbox, mainblue] (1.85,1.4) rectangle (2.75,2.3);
+      \draw[bbox, orange!80!black] (1.6,0.25) rectangle (3.0,0.85);
+      \node[font=\tiny, fill=mainblue, text=white, inner sep=1pt, anchor=south west]
+      at (0.4,1.5) {nut 0.97};
+      \node[font=\tiny, fill=mainblue, text=white, inner sep=1pt, anchor=north east]
+      at (1.85,2.3) {nut 0.91};
+      \node[font=\tiny, fill=orange!80!black, text=white, inner sep=1pt, anchor=north west]
+      at (1.6,0.25) {bolt 0.88};
+      \node[font=\small] at (1.6,-0.35) {boxes + labels};
+      \node[font=\small\bfseries] at (1.6,-0.95) {(b) object detection};
+    \end{scope}
+    % (c) semantic segmentation
+    \begin{scope}[xshift=7.4cm]
+      \scene{fill=mainblue!60, draw=mainblue}{fill=mainblue!60, draw=mainblue}
+      {fill=orange!60, draw=orange!80!black}
+      \node[font=\small] at (1.6,-0.35) {class of every pixel};
+      \node[font=\small\bfseries] at (1.6,-0.95) {(c) semantic segm.};
+    \end{scope}
+    % (d) instance segmentation
+    \begin{scope}[xshift=11.1cm]
+      \scene{fill=mainblue!60, draw=mainblue}{fill=green!50!black!50, draw=green!40!black}
+      {fill=orange!60, draw=orange!80!black}
+      \node[font=\small] at (1.6,-0.35) {pixels of every object};
+      \node[font=\small\bfseries] at (1.6,-0.95) {(d) instance segm.};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{Four vision tasks on images of parts. (a) One label for the whole
+    image. (b) A box, class and confidence score for every object. (c) Each
+    pixel is coloured by class; the two nuts get the same colour. (d) Each
+    object gets its own mask, so the two nuts are distinguished.}
+  \label{fig:tasks}
+\end{figure}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{lll}
+    \toprule
+    Task                   & Output per image                                & Loss (main parts)               \\
+    \midrule
+    Classification         & $C$ class scores                                & cross-entropy                   \\
+    Object detection       & a list of (box, class, score)                   & box regression + CE\\
+    Semantic segmentation  & $C$ scores per pixel, shape $(C, H, W)$ & CE at every pixel\\
+    Instance segmentation  & boxes + a pixel mask per object           & detection + mask loss\\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+Notice that every loss is built from the two pieces of Section 3.4: a
+\emph{regression} loss (MSE or similar) for continuous outputs such as box
+coordinates, and \emph{cross-entropy} for class labels.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Object Detection}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Bounding Boxes}
+
+An object's location is a \textbf{bounding box}, the smallest axis-aligned
+rectangle around it. Two formats are common (pixel coordinates are measured
+from the top-left corner, $y$ pointing down):
+\begin{itemize}[nosep]
+  \item \textbf{corners} $(x_{\min}, y_{\min}, x_{\max}, y_{\max})$;
+  \item \textbf{centre and size} $(x_c, y_c, w, h)$, often divided by the
+        image width and height so that all four numbers lie in $[0, 1]$.
+        YOLO uses this form.
+\end{itemize}
+
+\begin{stepbox}{Exercise 1 \quad Convert a box}
+  An image is $200$ pixels wide and $120$ pixels tall. A box has corners
+  $(20, 30, 60, 90)$.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item In pixels: $x_c = \sol[1cm]{40}$, $y_c = \sol[1cm]{60}$,
+          $w = \sol[1cm]{40}$, $h = \sol[1cm]{60}$.
+    \item Normalised: $\bigl(\,\sol[1cm]{0.2},\ \sol[1cm]{0.5},\
+            \sol[1cm]{0.2},\ \sol[1cm]{0.5}\,\bigr)$.
+  \end{enumerate}
+\end{stepbox}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Intersection over Union}
+
+How do we decide whether a predicted box is ``right''? It will never match the
+true box exactly. The standard measure of overlap is the
+\textbf{intersection over union}:
+\begin{resultbox}
+  \[
+    \text{IoU}(A, B) = \frac{\text{area}(A \cap B)}{\text{area}(A \cup B)}
+    = \frac{\text{area}(A \cap B)}
+    {\text{area}(A) + \text{area}(B) - \text{area}(A \cap B)} .
+  \]
+  $\text{IoU} = 1$ for identical boxes and $0$ for boxes that do not touch.
+  A detection usually counts as correct if $\text{IoU} \ge 0.5$ with a true
+  box of the same class.
+\end{resultbox}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.7cm, y=0.7cm]
+    \draw[gray!30] (0,0) grid (7,6);
+    \foreach \x in {0,...,7} \node[below, font=\scriptsize, gray] at (\x,0) {\x};
+    \foreach \y in {0,...,6} \node[left, font=\scriptsize, gray] at (0,\y) {\y};
+    \fill[purple!30] (2,1) rectangle (4,4);
+    \draw[bbox, mainblue] (0,0) rectangle (4,4);
+    \draw[bbox, orange!80!black] (2,1) rectangle (6,5);
+    \node[font=\small, mainblue] at (1,3.5) {$A$};
+    \node[font=\small, orange!80!black] at (5.4,4.5) {$B$};
+    \node[font=\scriptsize, purple!70!black] at (3,2.5) {$A\cap B$};
+  \end{tikzpicture}
+  \caption{Boxes $A = (0, 0, 4, 4)$ and $B = (2, 1, 6, 5)$ in corner format.
+    Their intersection is shaded.}
+  \label{fig:iou}
+\end{figure}
+
+\begin{stepbox}{Exercise 2 \quad Compute IoU}
+  \begin{enumerate}[label=(\alph*)]
+    \item For the boxes in Figure~\ref{fig:iou}: the intersection is
+          $\sol[1cm]{2}$ wide and $\sol[1cm]{3}$ tall, so its area is
+          $\sol[1cm]{6}$. The union has area
+          $\sol[3cm]{16 + 16 - 6 = 26}$, and
+          $\text{IoU} = \sol[2.5cm]{6/26 \approx 0.23}$.
+    \item Move $B$ to $(1, 1, 5, 5)$. Now the intersection is
+          $\sol[1.2cm]{3 \times 3}$, and
+          $\text{IoU} = \sol[3cm]{9/23 \approx 0.39}$.
+    \item In general, the intersection of boxes $A$ and $B$ in corner format
+          has width
+          $\sol[7cm]{\max\bigl(0,\ \min(x^A_{\max}, x^B_{\max}) - \max(x^A_{\min}, x^B_{\min})\bigr)}$,
+          and similarly for its height.
+  \end{enumerate}
+\end{stepbox}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Non-Maximum Suppression}
+
+A detector looks at many positions, so it usually reports the same object
+several times with slightly different boxes. \textbf{Non-maximum suppression
+  (NMS)} keeps the best box for each object:
+
+\begin{patternbox}
+  \begin{enumerate}[nosep]
+    \item Sort all boxes of one class by confidence score.
+    \item Keep the box with the highest score.
+    \item Delete every remaining box whose IoU with the kept box is above a
+          threshold (e.g.\ $0.5$): they are duplicates of it.
+    \item Repeat steps 2--3 with the boxes that are left.
+  \end{enumerate}
+\end{patternbox}
+
+\begin{stepbox}{Exercise 3 \quad Run NMS by hand}
+  A detector reports four ``nut'' boxes with scores $A{:}\,0.90$,
+  $B{:}\,0.80$, $C{:}\,0.75$, $D{:}\,0.60$. Their pairwise IoU is
+  \begin{center}
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{c|cccc}
+          & $A$  & $B$  & $C$  & $D$  \\
+      \hline
+      $A$ & ---  & 0.70 & 0.10 & 0.05 \\
+      $B$ & 0.70 & ---  & 0.20 & 0.10 \\
+      $C$ & 0.10 & 0.20 & ---  & 0.60 \\
+      $D$ & 0.05 & 0.10 & 0.60 & ---  \\
+    \end{tabular}
+  \end{center}
+  Use threshold $0.5$.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item Round 1: keep $\sol[1cm]{A}$; delete $\sol[2.5cm]{B\ (\text{IoU } 0.70)}$.
+    \item Round 2: keep $\sol[1cm]{C}$; delete $\sol[2.5cm]{D\ (\text{IoU } 0.60)}$.
+    \item The final detections are $\sol[2cm]{A,\ C}$: the image contains
+          $\sol[1cm]{2}$ nuts.
+  \end{enumerate}
+\end{stepbox}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Two Families of Detectors}
+
+\begin{itemize}
+  \item \textbf{Two-stage detectors} (R-CNN 2014, Fast R-CNN, Faster R-CNN
+        2015). Stage 1 proposes a few thousand regions that may contain an
+        object; stage 2 runs a CNN classifier and box regressor on each one.
+        They are accurate but slower.
+  \item \textbf{One-stage detectors} (YOLO 2016, SSD). A single forward pass
+        of one network predicts all boxes and classes at once, fast enough for
+        live video. Today's YOLO versions are both fast and accurate, which is
+        why they are the usual first choice in industry.
+\end{itemize}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{The Idea Behind YOLO}
+
+\textbf{YOLO} (``You Only Look Once'', Redmon et al.) turns detection into
+a single regression problem. The image is divided into an $S \times S$ grid.
+The grid cell that contains the \emph{centre} of an object is responsible
+for detecting it. Every cell predicts:
+\begin{itemize}[nosep]
+  \item $B$ boxes, each with $5$ numbers: $(x_c, y_c, w, h)$ and a
+        \emph{confidence} that the box contains an object;
+  \item $C$ class probabilities (which class the object is, if there is one).
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.75cm, y=0.75cm]
+    \draw[frame] (0,0) rectangle (7,7);
+    \fill[mainblue!15] (2,3) rectangle (3,4);
+    \draw[gray!60] (0,0) grid (7,7);
+    \filldraw[fill=gray!45, draw=gray!80!black] (2.6,3.4) circle (1.1);
+    \filldraw[fill=gray!8, draw=gray!80!black] (2.6,3.4) circle (0.45);
+    \fill[mainblue!45, opacity=0.55] (2,3) rectangle (3,4);
+    \draw[mainblue, thick] (2,3) rectangle (3,4);
+    \draw[bbox, mainblue] (1.5,2.3) rectangle (3.7,4.5);
+    \fill[red!70!black] (2.6,3.4) circle (2.5pt);
+    \node[font=\scriptsize, anchor=west, align=left] at (7.4,3.4)
+    {the cell containing the\\object's centre (red dot)\\predicts its box};
+    \draw[brace] (0,7.15) -- node[above=4pt, font=\small] {$S = 7$} (7,7.15);
+  \end{tikzpicture}
+  \caption{YOLO divides the image into an $S \times S$ grid. The shaded cell
+    contains the centre of the nut and is responsible for its box.}
+  \label{fig:yolo}
+\end{figure}
+
+The whole output is therefore one tensor of shape
+\begin{resultbox}
+  \[
+    S \times S \times (5B + C).
+  \]
+  Afterwards, boxes with low confidence are discarded and NMS removes the
+  duplicates.
+\end{resultbox}
+
+\begin{stepbox}{Exercise 4 \quad Size of the YOLO output}
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item The original YOLO used $S = 7$, $B = 2$ and the $C = 20$ classes
+          of the PASCAL VOC dataset. Each cell predicts
+          $\sol[3cm]{5 \cdot 2 + 20 = 30}$ numbers, and the output has
+          $\sol[3cm]{7 \cdot 7 \cdot 30 = 1\,470}$ numbers.
+    \item A defect detector uses $S = 13$, $B = 5$ and $C = 3$ defect types.
+          The output shape is $\sol[3cm]{13 \times 13 \times 28}$.
+  \end{enumerate}
+\end{stepbox}
+
+Modern versions refine this idea (several grid sizes for large and small
+objects, better box parametrisations, better losses), but the principle is
+unchanged: one CNN, one pass, a fixed-size output tensor. In practice
+students and engineers use a pretrained model from a library:
+
+\begin{codebox}
+from ultralytics import YOLO
+
+model = YOLO("yolov8n.pt")            # small model pretrained on COCO
+results = model("conveyor.jpg")      # boxes, classes, scores (after NMS)
+model.train(data="defects.yaml", epochs=50)   # fine-tune on our own data
+\end{codebox}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Measuring a Detector}
+
+A predicted box is a \textbf{true positive} if it has $\text{IoU} \ge 0.5$
+with a true box of the same class (each true box can be matched only once);
+otherwise it is a \textbf{false positive}. True boxes that no prediction
+matches are \textbf{missed}.
+\[
+  \text{precision} = \frac{\text{true positives}}{\text{predicted boxes}},
+  \qquad
+  \text{recall} = \frac{\text{true positives}}{\text{true boxes}}.
+\]
+Precision asks ``when the detector says defect, is it right?''; recall asks
+``how many of the defects did it find?''.
+
+\begin{stepbox}{Exercise 5 \quad Precision and recall}
+  An image set contains $10$ scratches. The detector reports $8$ boxes, of
+  which $6$ match a scratch with $\text{IoU} \ge 0.5$.
+  \[
+    \text{precision} = \sol[2.5cm]{6/8 = 0.75},
+    \qquad
+    \text{recall} = \sol[2.5cm]{6/10 = 0.60}.
+  \]
+  Raising the confidence threshold usually makes precision
+  $\sol[1.8cm]{\text{higher}}$ and recall $\sol[1.8cm]{\text{lower}}$.
+\end{stepbox}
+
+Sweeping the confidence threshold traces a precision--recall curve. The area
+under it is the \textbf{average precision} (AP) of a class, and its mean over
+all classes is the \textbf{mAP}, the standard single-number score of a
+detector.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Segmentation}
+
+\textbf{Semantic segmentation} classifies every pixel. For an $H \times W$
+image and $C$ classes the network outputs a $(C, H, W)$ tensor of logits:
+a softmax over the $C$ classes \emph{at each pixel}, trained with the
+cross-entropy averaged over all pixels.
+
+A classification CNN shrinks the feature maps to gain a large receptive
+field, but segmentation needs the answer back at full resolution. The
+solution is an \textbf{encoder--decoder}: the encoder is an ordinary CNN
+that downsamples; the decoder upsamples again (for example with
+\emph{transposed convolutions}, which enlarge a feature map). The popular
+\textbf{U-Net} (2015) adds skip connections that copy fine detail from each
+encoder level to the decoder level of the same size.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, scale=0.95, every node/.style={transform shape}]
+    \cuboid{0}{0.3}{2.8}{gray}{input\\$(3,H,W)$}
+    \cuboid{1.6}{0.5}{2.2}{mainblue}{}
+    \cuboid{3.3}{0.8}{1.4}{mainblue}{}
+    \cuboid{5.4}{1.1}{0.8}{mainblue}{bottleneck}
+    \cuboid{7.8}{0.8}{1.4}{orange}{}
+    \cuboid{9.8}{0.5}{2.2}{orange}{}
+    \cuboid{11.5}{0.3}{2.8}{green!60!black}{output\\$(C,H,W)$}
+    \draw[->, thick] (1.0,0) -- (1.5,0);
+    \draw[->, thick] (2.5,0) -- (3.2,0);
+    \draw[->, thick] (4.4,0) -- (5.3,0);
+    \draw[->, thick] (6.8,0) -- (7.7,0);
+    \draw[->, thick] (9.0,0) -- (9.7,0);
+    \draw[->, thick] (10.8,0) -- (11.4,0);
+    \draw[->, red!70!black, thick, dashed] (2.0,1.7) to[bend left=18] (10.0,1.7);
+    \draw[->, red!70!black, thick, dashed] (3.7,1.2) to[bend left=18] (8.2,1.2);
+    \node[font=\small, red!70!black] at (6.0,2.9) {skip connections};
+    \draw[brace] (4.9,-2.6) -- node[below=5pt, font=\small] {encoder (downsample)} (0,-2.6);
+    \draw[brace] (12.4,-2.6) -- node[below=5pt, font=\small] {decoder (upsample)} (7.6,-2.6);
+  \end{tikzpicture}
+  \caption{An encoder--decoder for segmentation in the style of U-Net. The
+    output has one score map per class, at the input resolution.}
+  \label{fig:unet}
+\end{figure}
+
+\begin{stepbox}{Exercise 6 \quad Segmentation output}
+  A crack-inspection network segments $256 \times 256$ images into $C = 3$
+  classes (background, crack, stain).
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item The output tensor for one image has shape
+          $\sol[3cm]{(3, 256, 256)}$.
+    \item The loss averages the cross-entropy over
+          $\sol[3cm]{256^2 = 65\,536}$ pixel predictions.
+  \end{enumerate}
+\end{stepbox}
+
+\textbf{Instance segmentation} (e.g.\ Mask R-CNN, 2017) combines both ideas:
+a detector finds each object, and a small segmentation head predicts a mask
+inside each box.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Optical Character Recognition (OCR)}
+
+\textbf{OCR} turns text in an image into a string: a serial number on a part,
+a lot code and expiry date on a package, the reading of a meter. Modern OCR
+systems are a pipeline of the tasks above.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=0.75cm]
+    \node[opbox] (img) {image};
+    \node[opbox, right=of img] (det) {text\\detection};
+    \node[opbox, right=of det] (crop) {crop each\\text line};
+    \node[opbox, right=of crop] (rec) {text\\recognition};
+    \node[opbox, right=of rec] (post) {post-\\processing};
+    \draw[->, thick] (img) -- (det);
+    \draw[->, thick] (det) -- (crop);
+    \draw[->, thick] (crop) -- (rec);
+    \draw[->, thick] (rec) -- (post);
+    \node[below=0.35cm of rec, font=\scriptsize\ttfamily] {L0T 2407-B};
+    \node[below=0.35cm of post, font=\scriptsize\ttfamily] {LOT 2407-B};
+    \node[below=0.35cm of det, font=\scriptsize\itshape, gray, align=center]
+    {a detection or\\segmentation CNN};
+  \end{tikzpicture}
+  \caption{An OCR pipeline. Post-processing applies known rules (here: the
+    code starts with the word \texttt{LOT}, so the digit \texttt{0} must be the
+    letter \texttt{O}).}
+  \label{fig:ocr}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{Text detection} finds the regions that contain text. This is
+        object detection or segmentation, as described above, often with
+        rotated boxes.
+  \item \textbf{Text recognition} reads one cropped line. The classic approach
+        cuts the line into single characters and classifies each with a CNN,
+        exactly like MNIST digits. This fails when characters touch or are
+        unevenly spaced. Modern recognisers such as \textbf{CRNN} instead run
+        a CNN over the whole line, read the resulting feature map column by
+        column from left to right as a sequence, and predict one character
+        (or ``blank'') per column. They are trained with the \textbf{CTC}
+        (connectionist temporal classification) loss, which does not need to
+        know where each character is.
+  \item \textbf{Post-processing} corrects the string with known formats,
+        dictionaries or checksums.
+\end{enumerate}
+
+\begin{stepbox}{Exercise 7 \quad Decoding a CTC output}
+  A CTC recogniser predicts one symbol per column; ``$-$'' is the blank. To
+  get the text, first \emph{merge repeated symbols}, then \emph{remove
+    blanks}.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item \texttt{- 2 2 - 4 4 4 - 0 7 7} \quad $\to$ \quad
+          $\sol[3cm]{\texttt{2407}}$
+    \item \texttt{- 1 1 - 1 - 5 5} \quad $\to$ \quad
+          $\sol[3cm]{\texttt{115}}$
+    \item Why is the blank needed? \quad
+          $\sol[8cm]{\text{Without it, ``11'' would merge into a single ``1''.}}$
+  \end{enumerate}
+\end{stepbox}
+
+Ready-made OCR libraries include \textbf{Tesseract}, \textbf{EasyOCR} and
+\textbf{PaddleOCR}. For new projects, transformer-based recognisers and large
+vision--language models are increasingly used as well.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Vision in Manufacturing}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{5.2cm}
+      >{\raggedright\arraybackslash}p{3.6cm}
+      >{\raggedright\arraybackslash}p{5.4cm}}
+    \toprule
+    Application                         & Task                    & Example                                         \\
+    \midrule
+    Accept / reject a part              & classification          & surface defect type on steel sheet              \\
+    Locate defects or count parts       & object detection        & missing components on a PCB; parts on a conveyor \\
+    Measure defect shape and size       & segmentation            & crack or weld-seam outline                      \\
+    Robot picking                       & detection / instance segm. & grasp points in a bin of parts              \\
+    Traceability                        & OCR                     & serial numbers, lot codes, expiry dates         \\
+    Rare or unknown defects             & anomaly detection       & train only on good parts, flag anything unusual \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\begin{notebox}
+  \textbf{Practical advice.} Start from a pretrained model and fine-tune it
+  (transfer learning, Section 4.4); a few hundred well-labelled images per
+  class are often enough. Invest in consistent lighting and camera position:
+  a controlled image makes every task easier. Choose the evaluation measure
+  with the cost of errors in mind: a missed defect (low recall) is usually
+  far more expensive than a false alarm.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Summary}
+
+\begin{itemize}
+  \item Classification, detection, semantic and instance segmentation share
+        a CNN feature extractor; they differ in the head and the loss.
+  \item A detection is a box, a class and a score. IoU measures box overlap;
+        NMS removes duplicate boxes.
+  \item YOLO predicts all boxes in one pass as a tensor of shape
+        $S \times S \times (5B + C)$. Two-stage detectors propose regions
+        first, then classify them.
+  \item Detectors are evaluated by precision, recall and mAP, with matches
+        defined by $\text{IoU} \ge 0.5$.
+  \item Segmentation predicts a class per pixel with an encoder--decoder such
+        as U-Net.
+  \item OCR is a pipeline: detect text, recognise each line (CNN features,
+        read as a sequence, CTC), then post-process.
+\end{itemize}
+
+\paragraph{Advanced topics.}
+The YOLO loss function and anchor boxes, the details of CTC, transposed
+convolutions and modern segmentation models, and anomaly detection will be
+covered in a later topic.
+
+\end{document}

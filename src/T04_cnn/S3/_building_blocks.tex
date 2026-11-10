@@ -1,0 +1,488 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
+
+% ── Local macros ──────────────────────────────────────────────────────────────
+\providecommand{\bZ}{\mathbf{Z}}
+\providecommand{\bH}{\mathbf{H}}
+
+% ── Local TikZ styles (match S1, S2) ──────────────────────────────────────────
+\usetikzlibrary{decorations.pathreplacing}
+\tikzset{
+  layerlabel/.style={font=\small\itshape, gray},
+  opbox/.style={draw=orange!70!black, fill=notebg, thick, rounded corners=4pt,
+      minimum height=0.9cm, minimum width=1.9cm, font=\small, align=center},
+  window/.style={draw=orange!80!black, line width=1.6pt},
+  brace/.style={decorate, decoration={brace, amplitude=4pt}, thick, gray},
+}
+
+% \drawgrid{<shift>}{<fill>}{<rows>} — grid of unit cells with values
+\newcommand{\drawgrid}[3]{%
+  \begin{scope}[shift={#1}]
+    \foreach \row [count=\r] in {#3} {
+        \foreach \v [count=\c] in \row {
+            \draw[gray!70, fill=#2] (\c-1,-\r+1) rectangle ++(1,-1);
+            \node[font=\small] at (\c-0.5,-\r+0.5) {$\v$};
+          }
+      }
+  \end{scope}%
+}
+
+% \cuboid{<x>}{<depth: channels>}{<height: spatial>}{<color>}{<label>}
+%   pseudo-3D block for a (C, H, W) tensor, centred vertically on y = 0
+\newcommand{\cuboid}[5]{%
+  \pgfmathsetmacro{\off}{#3*0.3}
+  \filldraw[fill=#4!20, draw=#4!80!black] (#1,-#3/2) rectangle ++(#2,#3);
+  \filldraw[fill=#4!35, draw=#4!80!black]
+  (#1,#3/2) -- ++(\off,\off) -- ++(#2,0) -- ++(-\off,-\off) -- cycle;
+  \filldraw[fill=#4!50, draw=#4!80!black]
+  (#1+#2,-#3/2) -- ++(\off,\off) -- ++(0,#3) -- ++(-\off,-\off) -- cycle;
+  \node[below, font=\scriptsize, align=center] at (#1+#2/2,-1.75) {#5};
+}
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Section 4.3: Building a CNN}} \\[0.3em]
+  {\large\itshape Activation, Pooling and the Classifier Head} \\[0.5em]
+  {\large AI-IM Class --- Lecture Notes}%
+  \ifstudentmode
+    \quad {\normalsize\color{gray}[Student Copy]}%
+  \fi
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+Section 4.2 gave us the convolutional layer. A real CNN wraps every
+convolution with two more steps and finishes with the MLP classifier of
+Section 3.4. In this section we
+\begin{itemize}[nosep]
+  \item describe the three stages of a typical CNN layer,
+  \item compute max and average pooling by hand and see why pooling gives
+        invariance to small shifts,
+  \item assemble a complete CNN for MNIST and trace its shapes and
+        parameters, and
+  \item see how gradients pass back through pooling.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The Three Stages of a CNN Layer}
+
+Goodfellow et al.\ describe a typical CNN layer as three stages applied in
+sequence:
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=0.9cm]
+    \node (in) {$\bX$};
+    \node[opbox, right=of in] (conv) {convolution\\[-2pt]\scriptsize (affine)};
+    \node[opbox, right=of conv] (relu) {detector\\[-2pt]\scriptsize (ReLU)};
+    \node[opbox, right=of relu] (pool) {pooling\\[-2pt]\scriptsize (max)};
+    \node[right=of pool] (out) {next layer};
+    \draw[->, thick] (in) -- (conv);
+    \draw[->, thick] (conv) -- node[above, font=\small] {$\bZ$} (relu);
+    \draw[->, thick] (relu) -- node[above, font=\small] {$\bH$} (pool);
+    \draw[->, thick] (pool) -- (out);
+    \node[font=\scriptsize\ttfamily, gray] at (conv.south) [below=3pt] {nn.Conv2d};
+    \node[font=\scriptsize\ttfamily, gray] at (relu.south) [below=3pt] {nn.ReLU};
+    \node[font=\scriptsize\ttfamily, gray] at (pool.south) [below=3pt] {nn.MaxPool2d};
+  \end{tikzpicture}
+  \caption{The three stages of a CNN layer, with the matching PyTorch modules.}
+  \label{fig:stages}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{Convolution} computes the pre-activations $\bZ$, as in
+        Section 4.2. Like $\bW\bh + \bb$ in an MLP, it is linear (affine).
+  \item \textbf{Detector stage.} A nonlinear activation, almost always ReLU,
+        is applied to each entry: $\bH = \relu(\bZ)$. Without it, stacked
+        convolutions would collapse into one linear map, exactly as stacked
+        linear layers do in an MLP.
+  \item \textbf{Pooling} replaces each small region of $\bH$ by a summary
+        statistic, such as its maximum. This is new, and is the topic of the
+        next section.
+\end{enumerate}
+
+\begin{stepbox}{Exercise 1 \quad The detector stage}
+  A convolution produced the feature map $\bZ$ below. Apply ReLU.
+  \[
+    \bZ =
+    \begin{pmatrix}
+      1 & -2 & 3 & 0 \\ -1 & 4 & -3 & 2 \\ 0 & 1 & 5 & -4 \\ 2 & -1 & 1 & 3
+    \end{pmatrix}
+    \qquad\Longrightarrow\qquad
+    \bH = \relu(\bZ) =
+    \begin{pmatrix}
+      \sol[0.5cm]{1} & \sol[0.5cm]{0} & \sol[0.5cm]{3} & \sol[0.5cm]{0} \\[2pt]
+      \sol[0.5cm]{0} & \sol[0.5cm]{4} & \sol[0.5cm]{0} & \sol[0.5cm]{2} \\[2pt]
+      \sol[0.5cm]{0} & \sol[0.5cm]{1} & \sol[0.5cm]{5} & \sol[0.5cm]{0} \\[2pt]
+      \sol[0.5cm]{2} & \sol[0.5cm]{0} & \sol[0.5cm]{1} & \sol[0.5cm]{3}
+    \end{pmatrix}
+  \]
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Pooling}
+
+A \textbf{pooling} layer slides a window over each feature map, just like a
+convolution, but instead of a weighted sum it computes a fixed summary of the
+window:
+\begin{itemize}[nosep]
+  \item \textbf{max pooling} takes the largest value (most common);
+  \item \textbf{average pooling} takes the mean.
+\end{itemize}
+The usual choice is a $2 \times 2$ window with stride $2$, so the windows do
+not overlap and each feature map shrinks to half its height and width.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.75cm, y=0.75cm, >=Stealth]
+    \fill[orange!25]       (0,0)   rectangle (2,-2);
+    \fill[mainblue!20]     (2,0)   rectangle (4,-2);
+    \fill[green!25]        (0,-2)  rectangle (2,-4);
+    \fill[purple!20]       (2,-2)  rectangle (4,-4);
+    \foreach \row [count=\r] in {{1,0,3,0},{0,4,0,2},{0,1,5,0},{2,0,1,3}} {
+        \foreach \v [count=\c] in \row {
+            \draw[gray!70] (\c-1,-\r+1) rectangle ++(1,-1);
+            \node[font=\small] at (\c-0.5,-\r+0.5) {$\v$};
+          }
+      }
+    \draw[thick] (0,0) rectangle (4,-4);
+    \draw[thick] (2,0) -- (2,-4); \draw[thick] (0,-2) -- (4,-2);
+    \node[layerlabel] at (2,-4.7) {$\bH$ ($4\times4$)};
+
+    \draw[->, thick] (4.8,-2) -- node[above, font=\small, align=center]
+    {$2\times2$ max\\stride 2} (8.2,-2);
+
+    \fill[orange!25]   (9,-1)  rectangle (10,-2);
+    \fill[mainblue!20] (10,-1) rectangle (11,-2);
+    \fill[green!25]    (9,-2)  rectangle (10,-3);
+    \fill[purple!20]   (10,-2) rectangle (11,-3);
+    \draw[thick] (9,-1) grid (11,-3);
+    \node[layerlabel] at (10,-3.7) {output ($2\times2$)};
+  \end{tikzpicture}
+  \caption{Max pooling with a $2 \times 2$ window and stride $2$. Each
+    coloured block of four values becomes one output value.}
+  \label{fig:maxpool}
+\end{figure}
+
+\begin{stepbox}{Exercise 2 \quad Max and average pooling}
+  Pool the feature map $\bH$ from Exercise 1 (Figure~\ref{fig:maxpool}) with
+  a $2 \times 2$ window and stride $2$.
+  \[
+    \text{max pooling:}\;
+    \begin{pmatrix}
+      \sol[0.7cm]{4} & \sol[0.7cm]{3} \\[2pt]
+      \sol[0.7cm]{2} & \sol[0.7cm]{5}
+    \end{pmatrix},
+    \qquad
+    \text{average pooling:}\;
+    \begin{pmatrix}
+      \sol[0.9cm]{1.25} & \sol[0.9cm]{1.25} \\[2pt]
+      \sol[0.9cm]{0.75} & \sol[0.9cm]{2.25}
+    \end{pmatrix}
+  \]
+  What fraction of the values is discarded? \quad
+  $\sol[3cm]{12/16 = 75\%}$
+\end{stepbox}
+
+Some facts about pooling layers:
+\begin{itemize}
+  \item A pooling layer has \textbf{no parameters}. Nothing is learned.
+  \item It acts on \textbf{each channel separately}: a $(C, H, W)$ input gives
+        a $(C, H', W')$ output with the same number of channels.
+  \item The output size follows the same formula as convolution,
+        $n_{\text{out}} = \lfloor (n + 2p - k)/s \rfloor + 1$. For $k = s = 2$
+        and $p = 0$ this is $\lfloor n/2 \rfloor$.
+  \item By shrinking the feature maps it cuts the computation of all later
+        layers, and it makes the receptive field grow much faster than
+        stacking convolutions alone (Section 4.1).
+\end{itemize}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Pooling Gives Invariance to Small Shifts}
+
+In Section 4.1 we saw that convolution is \emph{equivariant}: shift the
+input and the feature map shifts with it. Pooling makes the representation
+approximately \emph{invariant}: if the input moves a little, most pooled
+values do not change at all. The reason is simple. The maximum of a window does
+not care \emph{where} in the window the largest value is.
+
+\begin{stepbox}{Exercise 3 \quad Shift the input by one pixel}
+  A detector stage produced the 1-D output $\bh_A$. In $\bh_B$ the input was
+  shifted one pixel to the right, so every value moved one place. Apply max
+  pooling with window $3$ and stride $1$.
+  \begin{center}
+    \renewcommand{\arraystretch}{1.4}
+    \begin{tabular}{l*{7}{c}}
+      \toprule
+      $\bh_A$         & 1 & 5 & 2 & 0 & 4 & 1 & 0 \\
+      max pool        & $\sol[0.6cm]{5}$ & $\sol[0.6cm]{5}$ & $\sol[0.6cm]{4}$
+                      & $\sol[0.6cm]{4}$ & $\sol[0.6cm]{4}$ & & \\
+      \midrule
+      $\bh_B$         & 0 & 1 & 5 & 2 & 0 & 4 & 1 \\
+      max pool        & $\sol[0.6cm]{5}$ & $\sol[0.6cm]{5}$ & $\sol[0.6cm]{5}$
+                      & $\sol[0.6cm]{4}$ & $\sol[0.6cm]{4}$ & & \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  Between $\bh_A$ and $\bh_B$, $\sol[1cm]{7}$ of the $7$ detector values
+  changed, but only $\sol[1cm]{1}$ of the $5$ pooled values changed.
+\end{stepbox}
+
+This invariance is \emph{local}: it holds for shifts smaller than the pooling
+window. Stacking several conv--pool layers extends it to larger shifts, which
+is what a classifier needs: the answer ``digit 7'' should not depend on
+exactly where the 7 is written.
+
+\begin{notebox}
+  \textbf{Pooling over channels.} Pooling need not be over space. If several
+  filters each detect the same shape at a different rotation, taking the
+  maximum \emph{across those channels} gives a unit that responds to the
+  shape at any of those rotations. The network can learn invariances that
+  convolution alone does not provide (Goodfellow et al., Figure 9.9).
+\end{notebox}
+
+\begin{notebox}
+  \textbf{Pooling or stride?} A convolution with stride $2$ also halves the
+  feature map, and unlike pooling it has learned weights. Many modern
+  architectures (e.g.\ ResNet, Section 4.4) shrink the maps mostly with
+  strided convolutions and use pooling only at the start and end.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Assembling a Complete CNN}
+
+A CNN for classification has two parts:
+\begin{enumerate}
+  \item a \textbf{feature extractor}: a stack of conv--ReLU--pool blocks.
+        Each block halves the height and width and usually doubles the number
+        of channels. The network trades spatial detail (\emph{where}) for
+        richer features (\emph{what});
+  \item a \textbf{classifier head}: flatten the final feature maps into a
+        vector and feed it to the MLP classifier of Section 3.4, ending in
+        $C$ logits, softmax and the cross-entropy loss.
+\end{enumerate}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, scale=0.95, every node/.style={transform shape}]
+    \cuboid{0}{0.1}{2.8}{gray}{input\\$(1,28,28)$}
+    \cuboid{1.9}{0.5}{2.8}{mainblue}{conv1\\$(16,28,28)$}
+    \cuboid{4.1}{0.5}{1.4}{mainblue}{pool1\\$(16,14,14)$}
+    \cuboid{5.9}{1.0}{1.4}{orange}{conv2\\$(32,14,14)$}
+    \cuboid{8.3}{1.0}{0.7}{orange}{pool2\\$(32,7,7)$}
+
+    \draw[->, thick] (1.0,0) -- (1.8,0);
+    \draw[->, thick] (3.4,0) -- (4.0,0);
+    \draw[->, thick] (5.1,0) -- (5.8,0);
+    \draw[->, thick] (7.5,0) -- (8.2,0);
+
+    % classifier head
+    \filldraw[fill=green!20, draw=green!50!black] (10.4,-1.4) rectangle ++(0.25,2.8);
+    \node[below, font=\scriptsize, align=center] at (10.52,-1.75) {flatten\\$1568$};
+    \filldraw[fill=green!20, draw=green!50!black] (11.7,-0.8) rectangle ++(0.25,1.6);
+    \node[below, font=\scriptsize, align=center] at (11.82,-1.75) {dense\\$128$};
+    \filldraw[fill=green!35, draw=green!50!black] (13.0,-0.4) rectangle ++(0.25,0.8);
+    \node[below, font=\scriptsize, align=center] at (13.12,-1.75) {logits\\$10$};
+    \draw[->, thick] (9.7,0) -- (10.3,0);
+    \draw[->, thick] (10.75,0) -- (11.6,0);
+    \draw[->, thick] (12.05,0) -- (12.9,0);
+
+    \draw[brace] (0,2.1) -- node[above=5pt, font=\small] {feature extractor} (9.6,2.1);
+    \draw[brace] (10.3,2.1) -- node[above=5pt, font=\small] {classifier head} (13.4,2.1);
+  \end{tikzpicture}
+  \caption{A small CNN for MNIST. Each conv layer is followed by ReLU (not
+    drawn). The feature maps get smaller and deeper; the final maps are
+    flattened and classified by an MLP.}
+  \label{fig:cnn}
+\end{figure}
+
+In PyTorch the whole network is a short \texttt{nn.Sequential}:
+
+\begin{codebox}
+model = nn.Sequential(
+    nn.Conv2d(1, 16, kernel_size=3, padding=1),   # conv1
+    nn.ReLU(),
+    nn.MaxPool2d(2),                              # pool1
+    nn.Conv2d(16, 32, kernel_size=3, padding=1),  # conv2
+    nn.ReLU(),
+    nn.MaxPool2d(2),                              # pool2
+    nn.Flatten(),
+    nn.Linear(32 * 7 * 7, 128),
+    nn.ReLU(),
+    nn.Linear(128, 10),                           # logits
+)
+\end{codebox}
+
+As in Section 3.4, the model outputs logits; \texttt{nn.CrossEntropyLoss}
+applies softmax and cross-entropy together.
+
+\begin{stepbox}{Exercise 4 \quad Trace the network}
+  Fill in the output shape (for one image) and the number of parameters of
+  every layer in the model above.
+  \begin{center}
+    \renewcommand{\arraystretch}{1.35}
+    \begin{tabular}{lll}
+      \toprule
+      Layer                              & Output shape                     & Parameters                                        \\
+      \midrule
+      Input                              & $(1, 28, 28)$                    & ---                                               \\
+      Conv $1\!\to\!16$, $3\times3$, $p{=}1$ & $\sol[2.4cm]{(16, 28, 28)}$  & $\sol[5cm]{(1\cdot 9 + 1)\cdot 16 = 160}$         \\
+      ReLU                               & $\sol[2.4cm]{(16, 28, 28)}$      & $\sol[5cm]{0}$                                    \\
+      MaxPool $2\times2$                 & $\sol[2.4cm]{(16, 14, 14)}$      & $\sol[5cm]{0}$                                    \\
+      Conv $16\!\to\!32$, $3\times3$, $p{=}1$ & $\sol[2.4cm]{(32, 14, 14)}$ & $\sol[5cm]{(16\cdot 9 + 1)\cdot 32 = 4\,640}$     \\
+      MaxPool $2\times2$                 & $\sol[2.4cm]{(32, 7, 7)}$        & $\sol[5cm]{0}$                                    \\
+      Flatten                            & $\sol[2.4cm]{(1568)}$            & $\sol[5cm]{0}$                                    \\
+      Linear $\to 128$                   & $(128)$                          & $\sol[5cm]{(1568 + 1)\cdot 128 = 200\,832}$       \\
+      Linear $\to 10$                    & $(10)$                           & $\sol[5cm]{(128 + 1)\cdot 10 = 1\,290}$           \\
+      \midrule
+      \multicolumn{2}{l}{Total}          & $\sol[5cm]{206\,922}$                                                                \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  What percentage of the parameters is in the two convolutional layers?
+  \[
+    \sol[5cm]{4\,800 / 206\,922 \approx 2.3\%}
+  \]
+\end{stepbox}
+
+Two observations:
+\begin{itemize}
+  \item This CNN has \emph{more} parameters than the MLP $784 \to 128 \to 10$
+        (101\,770), yet it is more accurate on MNIST (around 99\% vs.\ 98\%)
+        and much more robust to shifted digits. What matters is not only how
+        many parameters a model has but how they are \emph{arranged}.
+  \item Almost all the parameters sit in the first dense layer, which looks
+        at the flattened $32 \times 7 \times 7$ maps. The convolutions, which do
+        the actual feature extraction, are cheap.
+\end{itemize}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Global Average Pooling}
+
+The expensive dense layer can be removed. \textbf{Global average pooling}
+(GAP) averages each channel over its \emph{entire} spatial extent, turning a
+$(C, H, W)$ tensor into a vector of $C$ numbers, one per feature. A single
+linear layer then maps these $C$ features to the logits. Most modern
+architectures end this way. In PyTorch it is
+\texttt{nn.AdaptiveAvgPool2d(1)} followed by \texttt{nn.Flatten()}.
+
+\begin{stepbox}{Exercise 5 \quad Replace the dense head with GAP}
+  \begin{enumerate}[label=(\alph*)]
+    \item Apply GAP to a $(2, 2, 2)$ tensor with two channels:
+          \[
+            \left(
+            \begin{pmatrix} 1 & 3 \\ 0 & 4 \end{pmatrix},\;
+            \begin{pmatrix} 2 & 2 \\ 6 & 2 \end{pmatrix}
+            \right)
+            \;\xrightarrow{\ \text{GAP}\ }\;
+            \bigl(\,\sol[1cm]{2},\ \sol[1cm]{3}\,\bigr)
+          \]
+    \item In the MNIST model, replace \texttt{Flatten} and both linear
+          layers by GAP and one \texttt{nn.Linear(32, 10)}. The head now has
+          $\sol[3cm]{(32 + 1) \cdot 10 = 330}$ parameters, and the whole
+          network has $\sol[4cm]{160 + 4\,640 + 330 = 5\,130}$.
+  \end{enumerate}
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Backpropagation Through Pooling}
+
+Training a CNN means backpropagating through all three stages. Section 4.2
+handled the convolution; ReLU passes the gradient where its input was
+positive and blocks it elsewhere, as in Section 3.4. Pooling has no
+parameters, but the gradient must still pass through it to reach the earlier
+layers.
+\begin{itemize}
+  \item \textbf{Max pooling.} Only the largest value in each window affected
+        the output, so the whole gradient goes to that position and the
+        others in the window get $0$.
+  \item \textbf{Average pooling.} Every value in a $k \times k$ window
+        contributed $1/k^2$ of the output, so each receives $1/k^2$ of the
+        gradient.
+\end{itemize}
+
+\begin{stepbox}{Exercise 6 \quad Route the gradient}
+  The max-pooling output of Exercise 2 receives the gradient
+  $\partial J / \partial(\text{output}) =
+    \begin{pmatrix} 0.5 & -1 \\ 2 & 0.3 \end{pmatrix}$.
+  Fill in $\partial J / \partial \bH$, using $\bH$ from Figure~\ref{fig:maxpool}.
+  \[
+    \pd{J}{\bH} =
+    \begin{pmatrix}
+      \sol[0.6cm]{0} & \sol[0.6cm]{0}   & \sol[0.6cm]{-1}  & \sol[0.6cm]{0} \\[2pt]
+      \sol[0.6cm]{0} & \sol[0.6cm]{0.5} & \sol[0.6cm]{0}   & \sol[0.6cm]{0} \\[2pt]
+      \sol[0.6cm]{0} & \sol[0.6cm]{0}   & \sol[0.6cm]{0.3} & \sol[0.6cm]{0} \\[2pt]
+      \sol[0.6cm]{2} & \sol[0.6cm]{0}   & \sol[0.6cm]{0}   & \sol[0.6cm]{0}
+    \end{pmatrix}
+  \]
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{What Does a CNN Learn?}
+
+When we visualise what makes the units of a trained CNN respond, a clear
+hierarchy appears (Zeiler and Fergus, 2014):
+\begin{itemize}[nosep]
+  \item \textbf{early layers} respond to edges, colour blobs and simple
+        textures, much like the kernels of Section 4.2;
+  \item \textbf{middle layers} respond to combinations of these: corners,
+        circles, grids, fur, wheels;
+  \item \textbf{late layers} respond to object parts and whole objects: eyes,
+        faces, car fronts.
+\end{itemize}
+This is the hierarchy predicted in Section 4.1: each layer builds on the
+features of the one below, over an ever larger receptive field.
+
+\begin{notebox}
+  \textbf{Try it.} The interactive \emph{CNN Explainer}
+  (\url{https://poloclub.github.io/cnn-explainer/}) runs a small CNN in the
+  browser and shows every convolution, ReLU and pooling step on real images.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Summary}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{lll}
+    \toprule
+    Layer           & Parameters                                 & Effect on shape $(C, H, W)$                \\
+    \midrule
+    Conv2d          & $(C_{\text{in}} k^2 + 1)\, C_{\text{out}}$ & $C \to C_{\text{out}}$; $H, W$ by formula  \\
+    ReLU            & 0                                          & unchanged                                  \\
+    MaxPool2d (2)   & 0                                          & $H, W$ halved; $C$ unchanged               \\
+    Global avg pool & 0                                          & $(C, H, W) \to (C)$                        \\
+    Flatten         & 0                                          & $(C, H, W) \to (C H W)$                    \\
+    Linear          & $(n_{\text{in}} + 1)\, n_{\text{out}}$     & $n_{\text{in}} \to n_{\text{out}}$         \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\begin{itemize}
+  \item A CNN layer has three stages: convolution, ReLU, pooling.
+  \item Max pooling keeps the largest value in each window. It has no
+        parameters, works per channel, and makes the network approximately
+        invariant to small shifts.
+  \item A classification CNN is a feature extractor (conv blocks that shrink
+        space and grow channels) followed by a classifier head (flatten or
+        GAP, then linear layers, softmax and cross-entropy).
+  \item In backpropagation, max pooling sends the gradient to the position of
+        the maximum; average pooling spreads it evenly.
+\end{itemize}
+
+\paragraph{Coming up.}
+Section 4.4 looks at the architectures that made CNNs famous, from LeNet-5
+to ResNet, and at the design ideas each one introduced.
+
+\end{document}

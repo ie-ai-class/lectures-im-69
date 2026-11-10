@@ -1,0 +1,479 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
+
+% ── Local macros ──────────────────────────────────────────────────────────────
+\providecommand{\bH}{\mathbf{H}}
+
+% ── Local TikZ styles (match S1–S3) ───────────────────────────────────────────
+\usetikzlibrary{decorations.pathreplacing}
+\tikzset{
+  layerlabel/.style={font=\small\itshape, gray},
+  opbox/.style={draw=orange!70!black, fill=notebg, thick, rounded corners=4pt,
+      minimum height=0.8cm, minimum width=1.7cm, font=\small, align=center},
+  convbox/.style={draw=mainblue, fill=boxbg, thick, rounded corners=3pt,
+      minimum height=0.75cm, minimum width=1.6cm, font=\small, align=center},
+  brace/.style={decorate, decoration={brace, amplitude=4pt}, thick, gray},
+}
+
+% \cuboid{<x>}{<depth: channels>}{<height: spatial>}{<color>}{<label>}
+\newcommand{\cuboid}[5]{%
+  \pgfmathsetmacro{\off}{#3*0.3}
+  \filldraw[fill=#4!20, draw=#4!80!black] (#1,-#3/2) rectangle ++(#2,#3);
+  \filldraw[fill=#4!35, draw=#4!80!black]
+  (#1,#3/2) -- ++(\off,\off) -- ++(#2,0) -- ++(-\off,-\off) -- cycle;
+  \filldraw[fill=#4!50, draw=#4!80!black]
+  (#1+#2,-#3/2) -- ++(\off,\off) -- ++(0,#3) -- ++(-\off,-\off) -- cycle;
+  \node[below, font=\scriptsize, align=center] at (#1+#2/2,-1.75) {#5};
+}
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Section 4.4: Famous CNN Architectures}} \\[0.3em]
+  {\large\itshape From LeNet-5 to ResNet, and Transfer Learning} \\[0.5em]
+  {\large AI-IM Class --- Lecture Notes}%
+  \ifstudentmode
+    \quad {\normalsize\color{gray}[Student Copy]}%
+  \fi
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+With convolution, pooling and the classifier head (Sections 4.2 and 4.3) we
+can build any CNN. The question is \emph{which} CNN to build: how many layers,
+what kernel sizes, how many channels. The answers came from a short series of
+famous architectures, each introducing one idea that is still used today.
+In this section we
+\begin{itemize}[nosep]
+  \item trace LeNet-5, the first successful CNN, layer by layer,
+  \item follow the ImageNet competition that made CNNs famous,
+  \item study the key idea of AlexNet, VGG, GoogLeNet and ResNet, with a hand
+        calculation for each, and
+  \item reuse a pretrained network for our own problem (\emph{transfer
+          learning}).
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{LeNet-5 (1998)}
+
+\textbf{LeNet-5}, by Yann LeCun and colleagues, read handwritten digits on
+bank cheques. It already has the structure of Section 4.3: two conv--pool
+blocks followed by fully connected layers.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, scale=0.95, every node/.style={transform shape}]
+    \cuboid{0}{0.1}{3.2}{gray}{input\\$(1,32,32)$}
+    \cuboid{1.9}{0.4}{2.8}{mainblue}{C1\\$(6,28,28)$}
+    \cuboid{3.9}{0.4}{1.4}{mainblue}{S2\\$(6,14,14)$}
+    \cuboid{5.6}{0.9}{1.0}{orange}{C3\\$(16,10,10)$}
+    \cuboid{7.9}{0.9}{0.5}{orange}{S4\\$(16,5,5)$}
+    \draw[->, thick] (1.1,0) -- (1.8,0);
+    \draw[->, thick] (3.1,0) -- (3.8,0);
+    \draw[->, thick] (4.8,0) -- (5.5,0);
+    \draw[->, thick] (6.9,0) -- (7.8,0);
+
+    \filldraw[fill=green!20, draw=green!50!black] (10.0,-1.2) rectangle ++(0.25,2.4);
+    \node[below, font=\scriptsize, align=center] at (10.12,-1.75) {C5\\$120$};
+    \filldraw[fill=green!20, draw=green!50!black] (11.3,-0.85) rectangle ++(0.25,1.7);
+    \node[below, font=\scriptsize, align=center] at (11.42,-1.75) {F6\\$84$};
+    \filldraw[fill=green!35, draw=green!50!black] (12.6,-0.4) rectangle ++(0.25,0.8);
+    \node[below, font=\scriptsize, align=center] at (12.72,-1.75) {output\\$10$};
+    \draw[->, thick] (9.1,0) -- (9.9,0);
+    \draw[->, thick] (10.35,0) -- (11.2,0);
+    \draw[->, thick] (11.65,0) -- (12.5,0);
+  \end{tikzpicture}
+  \caption{LeNet-5. C = convolution ($5\times5$, valid), S = subsampling
+    ($2\times2$ average pooling), F = fully connected.}
+  \label{fig:lenet}
+\end{figure}
+
+The input is a $32 \times 32$ grayscale image (MNIST digits padded from
+$28 \times 28$). All convolutions use $5 \times 5$ kernels with stride $1$ and
+no padding; all pooling layers are $2 \times 2$ with stride $2$. We use the
+common modern version: ReLU activations, average pooling, every C3 filter
+connected to all 6 input channels, and a linear output layer.
+
+\begin{stepbox}{Exercise 1 \quad Trace LeNet-5}
+  \begin{center}
+    \renewcommand{\arraystretch}{1.35}
+    \begin{tabular}{llll}
+      \toprule
+      Layer                 & Operation                    & Output shape                  & Parameters                                     \\
+      \midrule
+      Input                 &                              & $(1, 32, 32)$                 & ---                                            \\
+      C1                    & 6 filters $5\times5$         & $\sol[2.2cm]{(6, 28, 28)}$    & $\sol[4.6cm]{(1\cdot25+1)\cdot6 = 156}$        \\
+      S2                    & avg pool $2\times2$          & $\sol[2.2cm]{(6, 14, 14)}$    & $\sol[4.6cm]{0}$                               \\
+      C3                    & 16 filters $5\times5$        & $\sol[2.2cm]{(16, 10, 10)}$   & $\sol[4.6cm]{(6\cdot25+1)\cdot16 = 2\,416}$    \\
+      S4                    & avg pool $2\times2$          & $\sol[2.2cm]{(16, 5, 5)}$     & $\sol[4.6cm]{0}$                               \\
+      C5                    & 120 filters $5\times5$       & $\sol[2.2cm]{(120, 1, 1)}$    & $\sol[4.6cm]{(16\cdot25+1)\cdot120 = 48\,120}$ \\
+      F6                    & linear                       & $(84)$                        & $\sol[4.6cm]{(120+1)\cdot84 = 10\,164}$        \\
+      Output                & linear                       & $(10)$                        & $\sol[4.6cm]{(84+1)\cdot10 = 850}$             \\
+      \midrule
+      \multicolumn{3}{l}{Total}                                                            & $\sol[4.6cm]{61\,706}$                         \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  Why is C5 called a convolution although it behaves like a fully connected
+  layer?
+  \soleq[1.2cm]{\parbox{0.85\linewidth}{\raggedright Its $5\times5$ kernel
+      exactly covers the $5\times5$ input, so there is only one position and
+      each filter sees every input value.}}
+\end{stepbox}
+
+\begin{notebox}
+  \textbf{The original LeNet-5} used scaled $\tanh$ activations, pooling
+  layers with one trainable weight and bias per channel, and a hand-designed
+  table that connected each C3 filter to only some of the S2 channels
+  (1\,516 parameters instead of 2\,416), to save computation in 1998.
+  Its total is still about 60 thousand parameters.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The ImageNet Challenge}
+
+LeNet-5 worked on small grayscale digits. Natural photos are much harder:
+thousands of object types, varying lighting, viewpoint and background.
+The \textbf{ImageNet Large Scale Visual Recognition Challenge (ILSVRC)} ran
+from 2010 to 2017. Its classification task had about 1.2 million training
+images in 1\,000 classes. Performance is measured by the \textbf{top-5 error}:
+a prediction counts as correct if the true class is among the model's five
+most probable classes.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=1.45cm, y=0.13cm]
+    \draw[->, gray] (0.3,0) -- (8.7,0);
+    \draw[->, gray] (0.3,0) -- (0.3,32) node[above, font=\small] {top-5 error (\%)};
+    \foreach \t in {0,10,20,30}
+    \node[left, font=\scriptsize] at (0.3,\t) {\t};
+    \draw[red!70!black, dashed, thick] (0.4,5.1) -- (8.6,5.1)
+    node[right, font=\scriptsize, align=left] {human\\$\approx 5.1$};
+    \foreach \i/\yr/\e/\name/\col in {
+        1/2010/28.2/{}/gray,
+        2/2011/25.8/{}/gray,
+        3/2012/16.4/AlexNet/mainblue,
+        4/2013/11.7/ZFNet/mainblue,
+        5/2014/6.7/GoogLeNet/mainblue,
+        6/2015/3.6/ResNet/mainblue,
+        7/2016/3.0/{}/mainblue,
+        8/2017/2.3/SENet/mainblue} {
+        \filldraw[fill=\col!40, draw=\col!80!black] (\i-0.3,0) rectangle (\i+0.3,\e);
+        \node[above, font=\scriptsize, fill=white, inner sep=1pt] at (\i,\e+0.4) {\e};
+        \node[below, font=\scriptsize] at (\i,0) {\yr};
+        \node[below, font=\scriptsize\itshape, gray] at (\i,-2.8) {\name};
+      }
+  \end{tikzpicture}
+  \caption{Winning top-5 error in the ILSVRC classification task. Grey: methods
+    based on hand-designed features; blue: CNNs. The human estimate is
+    Andrej Karpathy's result on a test sample.}
+  \label{fig:ilsvrc}
+\end{figure}
+
+The jump in 2012 is the moment deep learning took over computer vision.
+By 2015 CNNs beat the human estimate. Each of the architectures below won
+(or nearly won) one of these years.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{AlexNet (2012): Scale It Up}
+
+\textbf{AlexNet} (Krizhevsky, Sutskever and Hinton) is LeNet made bigger:
+5 convolutional and 3 fully connected layers, about 60 million parameters,
+trained on $224 \times 224$ colour images. Its architecture was not new; what
+made it work were practical choices that are still standard today:
+\begin{itemize}[nosep]
+  \item \textbf{ReLU} instead of $\tanh$, which trained several times faster
+        (Section 3.4);
+  \item \textbf{GPUs}: two gaming graphics cards, for about a week;
+  \item \textbf{data augmentation}: random crops and flips of the training
+        images, to get more data for free;
+  \item \textbf{dropout} in the fully connected layers, against overfitting
+        (we return to it in a later topic).
+\end{itemize}
+
+\begin{stepbox}{Exercise 2 \quad AlexNet's first layer}
+  The first layer has 96 filters of size $11 \times 11$ with stride $4$ and
+  no padding. In the original implementation the input is $(3, 227, 227)$.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item Output size: $\sol[5cm]{\lfloor (227 - 11)/4 \rfloor + 1 = 55}$,
+          so the output shape is $\sol[3cm]{(96, 55, 55)}$.
+    \item Parameters: $\sol[6cm]{(3 \cdot 121 + 1) \cdot 96 = 34\,944}$.
+  \end{enumerate}
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{VGG (2014): Only Small Kernels}
+
+\textbf{VGG} (Simonyan and Zisserman, Oxford) asked how far a very simple
+design can go. It uses only one kind of convolution, $3 \times 3$ with stride
+$1$ and same padding, and only $2 \times 2$ max pooling, repeated in blocks
+until the network has 16 or 19 layers. Each block halves the feature maps and
+doubles the channels: $64 \to 128 \to 256 \to 512$.
+
+Why only $3 \times 3$? Two stacked $3 \times 3$ layers have the same receptive
+field as one $5 \times 5$ layer (Section 4.1), but they are cheaper and have
+one more ReLU.
+
+\begin{stepbox}{Exercise 3 \quad Two small kernels vs.\ one large}
+  All layers have $C$ input and $C$ output channels. Ignore biases.
+  \begin{center}
+    \renewcommand{\arraystretch}{1.4}
+    \begin{tabular}{lccc}
+      \toprule
+      Option                     & Receptive field       & Weights            & Weights for $C = 64$ \\
+      \midrule
+      one $5\times5$ layer       & $5\times5$            & $\sol[1.4cm]{25C^2}$ & $\sol[2cm]{102\,400}$ \\
+      two $3\times3$ layers      & $\sol[1.4cm]{5\times5}$ & $\sol[1.4cm]{18C^2}$ & $\sol[2cm]{73\,728}$  \\
+      one $7\times7$ layer       & $7\times7$            & $\sol[1.4cm]{49C^2}$ & $\sol[2cm]{200\,704}$ \\
+      three $3\times3$ layers    & $\sol[1.4cm]{7\times7}$ & $\sol[1.4cm]{27C^2}$ & $\sol[2cm]{110\,592}$ \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+\end{stepbox}
+
+VGG-16 reached 7.3\% top-5 error, but it has about 138 million parameters,
+most of them in its three fully connected layers. Its uniform design made it
+popular as a starting point for other tasks.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{GoogLeNet / Inception (2014): Go Wide, Cheaply}
+
+\textbf{GoogLeNet} (Szegedy et al., Google) won 2014 with 6.7\% top-5 error
+using about 7 million parameters, roughly 20 times fewer than VGG. Its
+building block is the \textbf{Inception module}: instead of choosing one kernel
+size, it applies several in parallel and concatenates the results along the
+channel dimension.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, x=2.6cm, y=1.15cm]
+    \node[opbox, minimum width=3cm] (in) at (1.5, 3) {previous layer};
+    \node[convbox] (a1) at (0, 1.5) {$1\times1$};
+    \node[convbox] (b1) at (1, 2) {$1\times1$};
+    \node[convbox] (b2) at (1, 1) {$3\times3$};
+    \node[convbox] (c1) at (2, 2) {$1\times1$};
+    \node[convbox] (c2) at (2, 1) {$5\times5$};
+    \node[opbox, minimum width=1.6cm] (d1) at (3, 2) {$3\times3$\\[-2pt]\scriptsize max pool};
+    \node[convbox] (d2) at (3, 1) {$1\times1$};
+    \node[opbox, minimum width=3cm] (out) at (1.5, -0.3) {concatenate channels};
+    \draw[->] (in) -- (a1); \draw[->] (in) -- (b1);
+    \draw[->] (in) -- (c1); \draw[->] (in) -- (d1);
+    \draw[->] (b1) -- (b2); \draw[->] (c1) -- (c2); \draw[->] (d1) -- (d2);
+    \draw[->] (a1) -- (out); \draw[->] (b2) -- (out);
+    \draw[->] (c2) -- (out); \draw[->] (d2) -- (out);
+  \end{tikzpicture}
+  \caption{An Inception module. Four branches see the same input with
+    different receptive fields. In the second and third branches a
+    $1 \times 1$ convolution first shrinks the number of channels, so the
+    expensive $3\times3$ and $5\times5$ convolutions become cheap.}
+  \label{fig:inception}
+\end{figure}
+
+\paragraph{The $1 \times 1$ convolution.}
+A $1 \times 1$ kernel looks at a single pixel, but across \emph{all} its
+channels. At every pixel it computes a weighted sum of the $C_{\text{in}}$
+channel values, which is exactly a small fully connected layer applied at
+each pixel separately. It changes the number of channels without touching the
+height and width.
+
+\begin{stepbox}{Exercise 4 \quad The $1\times1$ bottleneck}
+  \begin{enumerate}[label=(\alph*)]
+    \item One pixel has channel values $(2, -1, 3)$. A $1 \times 1$ layer has
+          two filters with weights $(1, 0, 1)$ and $(0, 2, -1)$ and no bias.
+          The pixel's output is
+          $\bigl(\,\sol[1cm]{5},\ \sol[1cm]{-5}\,\bigr)$.
+    \item An input of shape $(256, 28, 28)$ goes through a $5 \times 5$
+          convolution with 32 filters (same padding). Ignoring biases, it has
+          $\sol[5cm]{256 \cdot 25 \cdot 32 = 204\,800}$ weights.
+    \item Insert a $1\times1$ convolution with 16 filters first. The weights
+          are now
+          \[
+            \underbrace{\sol[3cm]{256 \cdot 16 = 4\,096}}_{1\times1}
+            + \underbrace{\sol[4cm]{16 \cdot 25 \cdot 32 = 12\,800}}_{5\times5}
+            = \sol[2cm]{16\,896},
+          \]
+          about $\sol[1.5cm]{12}$ times fewer. The number of multiplications
+          shrinks by the same factor.
+  \end{enumerate}
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{ResNet (2015): Skip Connections}
+
+If deeper is better, why not stack 100 layers? He et al.\ (Microsoft
+Research) found that plain deep networks did not just overfit: a 56-layer
+network had a \emph{higher training error} than a 20-layer one. The deeper
+network was harder to \emph{optimise}, even though it could in principle
+copy the 20-layer network and set the extra layers to the identity.
+
+Their fix was the \textbf{residual block}. Its layers compute a correction
+$F(\bH)$, which is \emph{added} to the block's input through a
+\textbf{skip connection} (shortcut):
+\begin{resultbox}
+  \[
+    \text{output} = \relu\bigl(F(\bH) + \bH\bigr).
+  \]
+  If the best thing a block can do is nothing, it only needs $F = 0$, which
+  is easy to learn (all weights near zero).
+\end{resultbox}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=0.8cm]
+    \node (in) {$\bH$};
+    \node[convbox, right=of in] (c1) {$3\times3$ conv};
+    \node[opbox, right=0.6cm of c1, minimum width=1.2cm] (r1) {ReLU};
+    \node[convbox, right=0.6cm of r1] (c2) {$3\times3$ conv};
+    \node[circle, draw, thick, right=1.3cm of c2, inner sep=1pt] (plus) {$+$};
+    \node[opbox, right=0.6cm of plus, minimum width=1.2cm] (r2) {ReLU};
+    \node[right=0.6cm of r2] (out) {output};
+    \draw[->, thick] (in) -- (c1);
+    \draw[->, thick] (c1) -- (r1);
+    \draw[->, thick] (r1) -- (c2);
+    \draw[->, thick] (c2) -- node[below, font=\small] {$F(\bH)$} (plus);
+    \draw[->, thick] (plus) -- (r2);
+    \draw[->, thick] (r2) -- (out);
+    \draw[->, thick, red!70!black] ($(in.east)+(0.2,0)$) -- ++(0,-1.1)
+    -| node[pos=0.25, below, font=\small] {identity (skip connection)} (plus);
+    \draw[brace] ($(c1.north west)+(0,0.15)$) --
+    node[above=5pt, font=\small] {$F$: the residual branch}
+    ($(c2.north east)+(0,0.15)$);
+  \end{tikzpicture}
+  \caption{A residual block. The input skips past two convolutions and is
+    added to their output. (Real ResNets also put a normalisation layer after
+    each convolution, which we meet in a later topic.)}
+  \label{fig:resblock}
+\end{figure}
+
+\paragraph{Why it helps the gradient.}
+Recall the vanishing-gradient problem of Section 3.4: backpropagation
+multiplies one derivative per layer, and a product of many small numbers is
+tiny. Take one scalar ``layer'' $y = f(x)$ with derivative $f'$. The residual
+version $y = x + f(x)$ has derivative $1 + f'$. The $1$ comes from the
+skip connection, and it does not shrink.
+
+\begin{stepbox}{Exercise 5 \quad Gradient through three layers}
+  Each layer has $f' = 0.1$. Compute $\partial y / \partial x$ through three
+  layers in a row.
+  \[
+    \text{plain: } (f')^3 = \sol[2cm]{0.001},
+    \qquad
+    \text{residual: } (1 + f')^3 = \sol[2cm]{1.331}.
+  \]
+  Through 50 plain layers the gradient would be $0.1^{50} = 10^{-50}$.
+\end{stepbox}
+
+With skip connections, He et al.\ trained networks with 152 layers and won
+2015 with 3.6\% top-5 error, better than the human estimate. When the two
+shapes differ (the block changes the number of channels or uses stride $2$),
+the shortcut uses a $1 \times 1$ convolution to match them. Skip connections
+are now everywhere in deep learning, including the transformers behind
+large language models.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Comparison}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{lcrrrl}
+    \toprule
+    Network      & Year & Layers & Parameters & Top-5 error & Key idea                      \\
+    \midrule
+    LeNet-5      & 1998 & 5      & 60\,K      & ---         & conv + pool + dense           \\
+    AlexNet      & 2012 & 8      & 60\,M      & 16.4\%      & ReLU, GPUs, augmentation      \\
+    VGG-16       & 2014 & 16     & 138\,M     & 7.3\%       & stacks of $3\times3$ kernels  \\
+    GoogLeNet    & 2014 & 22     & 7\,M       & 6.7\%       & Inception, $1\times1$ bottleneck \\
+    ResNet-152   & 2015 & 152    & 60\,M      & 3.6\%       & skip connections              \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\begin{notebox}
+  \textbf{After 2015.} Later designs mostly refine these ideas.
+  \emph{MobileNet} splits each convolution into a per-channel spatial step and
+  a $1\times1$ step so that it runs on phones and embedded cameras.
+  \emph{EfficientNet} scales depth, width and image resolution together.
+  \emph{Vision Transformers} (2020) replace convolution with attention, and
+  \emph{ConvNeXt} (2022) showed that a modernised ResNet is just as good.
+  CNNs remain the default choice when data or computing power is limited,
+  as in most factory applications.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Transfer Learning}
+
+Training a ResNet from scratch needs a million labelled images and days of
+GPU time. A factory that wants to classify, say, three kinds of surface defect
+may have only a few hundred photos. \textbf{Transfer learning} solves this by
+reusing a network that was already trained on ImageNet.
+
+The idea follows from Section 4.3. The feature extractor of an ImageNet
+network has learned general features (edges, textures, shapes) that are
+useful for almost any image. Only the classifier head is specific to the 1\,000
+ImageNet classes. So we
+\begin{enumerate}[nosep]
+  \item load the pretrained network,
+  \item replace its final linear layer with a new one that has one output per
+        \emph{our} class, and
+  \item train on our data: either only the new layer (\emph{feature
+          extraction}, with the rest frozen), or the whole network with a small
+        learning rate (\emph{fine-tuning}).
+\end{enumerate}
+
+\begin{codebox}
+import torchvision
+
+model = torchvision.models.resnet18(weights="IMAGENET1K_V1")
+for p in model.parameters():
+    p.requires_grad = False              # freeze the feature extractor
+
+model.fc = nn.Linear(512, 3)             # new head: 3 defect classes
+optimizer = torch.optim.Adam(model.fc.parameters(), lr=1e-3)
+\end{codebox}
+
+\begin{stepbox}{Exercise 6 \quad How much is trained?}
+  ResNet-18 has about 11.7 million parameters. Its final global average pooling
+  produces 512 features.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item The new head has $\sol[4cm]{(512 + 1) \cdot 3 = 1\,539}$
+          parameters.
+    \item With the feature extractor frozen, we train about
+          $\sol[3cm]{0.013\%}$ of the network.
+  \end{enumerate}
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Summary}
+
+\begin{itemize}
+  \item LeNet-5 set the pattern: conv--pool blocks followed by dense layers.
+        Tracing its shapes and parameters uses only the formulas of
+        Sections 4.2 and 4.3.
+  \item AlexNet (2012) showed that a large CNN trained on GPUs with ReLU,
+        augmentation and dropout beats hand-designed features by a wide
+        margin.
+  \item VGG: stacks of $3\times3$ kernels give large receptive fields with
+        fewer weights and more nonlinearity.
+  \item GoogLeNet: parallel branches, with $1\times1$ convolutions to cut the
+        number of channels cheaply.
+  \item ResNet: skip connections, $\text{output} = \relu(F(\bH) + \bH)$, keep
+        gradients alive and make networks of 100+ layers trainable.
+  \item Transfer learning reuses an ImageNet feature extractor and retrains
+        only a new head, so a few hundred images can be enough.
+\end{itemize}
+
+\paragraph{Coming up.}
+Section 4.5 goes beyond classifying a whole image: finding \emph{where}
+objects are (detection, segmentation) and reading text (OCR).
+
+\end{document}
