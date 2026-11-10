@@ -8,7 +8,7 @@
 \makeatother
 \usepackage{lecturenotes}
 
-% ── Local TikZ styles (match S3/S4) ───────────────────────────────────────────
+% ── Local TikZ styles (match S3_4_comb) ───────────────────────────────────────────
 \usetikzlibrary{decorations.pathreplacing}
 \providecommand{\bp}{\mathbf{p}}
 \tikzset{
@@ -28,7 +28,7 @@
 \begin{document}
 
 \begin{center}
-  {\LARGE \textbf{Section 3.5: The Multi-Layer Perceptron}} \\[0.3em]
+  {\LARGE \textbf{Section 3.4: The Multi-Layer Perceptron}} \\[0.3em]
   {\large\itshape From a Toy Network to a General Architecture} \\[0.5em]
   {\large AI-IM Class --- Lecture Notes}%
   \ifstudentmode
@@ -40,8 +40,8 @@
 \hrule
 \vspace{1.5em}
 
-In Sections 3.3 and 3.4 we computed the forward pass and backpropagation
-\emph{by hand} for a tiny network: two inputs, two hidden neurons and one
+In Section 3.3 we computed the forward pass \emph{by hand} and saw how
+backpropagation trains a tiny network: two inputs, two hidden neurons and one
 output. Real networks are built from exactly the same pieces, only more of
 them. In this section we step back and look at the network as a whole:
 \begin{itemize}[nosep]
@@ -111,7 +111,7 @@ Each layer is a column of \emph{nodes} (neurons):
         layers with weights is the network's \textbf{depth}.
 \end{itemize}
 
-Our XOR network from Sections 3.3--3.4 is the special case with
+Our XOR network from Section 3.3 is the special case with
 2 inputs, one hidden layer of width 2, and 1 output.
 
 % ──────────────────────────────────────────────────────────────────────────────
@@ -520,7 +520,7 @@ are shown below.
 \end{figure}
 
 \paragraph{Why not always use sigmoid?}
-Backpropagation (Section 3.4) multiplies one factor $\phi'(z)$ per layer on
+Backpropagation (Section 3.3) multiplies one factor $\phi'(z)$ per layer on
 the way back. For the sigmoid, $\sigmoid'(z) = \sigmoid(z)\bigl(1-\sigmoid(z)\bigr)
   \le 0.25$, and it is almost $0$ whenever $|z|$ is large (the flat parts of the
 ``S''). Through many layers these small factors multiply together, and the
@@ -562,7 +562,7 @@ $\alpha$ (typically $0.01$--$0.1$).
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Optimizer: Gradient Descent on Large Datasets}
 
-In Section 3.4 we updated the weights using the gradient from a
+In Section 3.3 we updated the weights using the gradient from a
 \emph{single} XOR input. In general the loss is an average over all $n$
 training samples,
 \[
@@ -823,7 +823,7 @@ and the loss compares its probabilities with the one-hot label:
     \pd{J}{z_k} = p_k - y_k ,
   \]
   the same ``prediction minus target'' form we saw for regression in
-  Section 3.4. Backpropagation then continues through the hidden layers
+  Section 3.3. Backpropagation then continues through the hidden layers
   exactly as before.
 \end{notebox}
 

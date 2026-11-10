@@ -1,0 +1,483 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
+
+% ── Local TikZ styles ─────────────────────────────────────────────────────────
+\tikzset{
+  neuron/.style={circle, draw=mainblue, fill=boxbg,
+      minimum size=1.1cm, thick, font=\small},
+  preact/.style={circle, draw=mainblue, fill=white,
+      minimum size=1.1cm, thick, font=\small},
+  input/.style={circle, draw=gray!60, fill=gray!15,
+      minimum size=1.1cm, thick, font=\small},
+  lossnode/.style={circle, draw=red!70!black, fill=warnbg,
+      minimum size=1.1cm, thick, font=\small},
+  unitbox/.style={draw=gray!60, dashed, rounded corners=6pt},
+  back/.style={->, thick, red!70!black, dashed},
+}
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Section 3.3: Forward Pass and Backpropagation}} \\[0.3em]
+  {\large\itshape From Prediction to Learning} \\[0.5em]
+  {\large AI-IM Class --- Lecture Notes}%
+  \ifstudentmode
+    \quad {\normalsize\color{gray}[Student Copy]}%
+  \fi
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+In Section 3.2 we learned that gradient descent improves a model by
+repeating two things: compute the loss, then nudge every parameter against
+its gradient. For a neural network this cycle has two halves:
+\begin{itemize}[nosep]
+  \item the \textbf{forward pass}, which turns an input $\bx$ into a
+        prediction $\yhat$ and a loss $J$, and
+  \item \textbf{backpropagation}, which works out how much each weight
+        contributed to that loss, giving the gradient $\partial J/\partial w$.
+\end{itemize}
+We will compute the forward pass by hand, see the \emph{idea} behind
+backpropagation, and then check that one update step really lowers the loss.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The Network}
+
+We work with a \textbf{two-layer feedforward network} (one hidden layer)
+for the XOR problem:
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=0pt]
+    % ── Nodes ──────────────────────────────────────────────────────────────────
+    \node[input]   (x1) at (0,  1.4) {$x_1$};
+    \node[input]   (x2) at (0, -1.4) {$x_2$};
+    \node[neuron]  (h1) at (4,  1.4) {$h_1$};
+    \node[neuron]  (h2) at (4, -1.4) {$h_2$};
+    \node[neuron]  (yh) at (8,  0)   {$\yhat$};
+
+    % ── Connections: input → hidden ────────────────────────────────────────────
+    \draw[->, thick] (x1) -- node[above, font=\scriptsize, pos=0.5]
+    {$w^{(1)}_{11}=\phantom{-}0.5$} (h1);
+    \draw[->, thick] (x1) -- node[above left, font=\scriptsize, pos=0.35]
+    {$w^{(1)}_{21}=\phantom{-}0.5$} (h2);
+    \draw[->, thick] (x2) -- node[below left, font=\scriptsize, pos=0.35]
+    {$w^{(1)}_{12}=-0.5$} (h1);
+    \draw[->, thick] (x2) -- node[below, font=\scriptsize, pos=0.5]
+    {$w^{(1)}_{22}=\phantom{-}0.5$} (h2);
+
+    % ── Connections: hidden → output ───────────────────────────────────────────
+    \draw[->, thick] (h1) -- node[above, font=\scriptsize, pos=0.5]
+    {$w^{(2)}_1=0.5$} (yh);
+    \draw[->, thick] (h2) -- node[below, font=\scriptsize, pos=0.5]
+    {$w^{(2)}_2=0.5$} (yh);
+
+    % ── Bias annotations ───────────────────────────────────────────────────────
+    \node[font=\scriptsize, gray!80!black, above=0.25cm of h1] {$b^{(1)}_1 = 0.5$};
+    \node[font=\scriptsize, gray!80!black, below=0.25cm of h2] {$b^{(1)}_2 = 0.0$};
+    \node[font=\scriptsize, gray!80!black, above=0.25cm of yh] {$b^{(2)} = 0.0$};
+
+    % ── Layer labels ───────────────────────────────────────────────────────────
+    \node[font=\small\itshape, gray] at (0, 3.1) {Input layer};
+    \node[font=\small\itshape, gray] at (4, 3.1) {Hidden layer ($\sigmoid$)};
+    \node[font=\small\itshape, gray] at (8, 3.1) {Output ($\sigmoid$)};
+  \end{tikzpicture}
+  \caption{A two-layer feedforward network with one hidden layer.}
+  \label{fig:architecture}
+\end{figure}
+
+In matrix form, the (not yet trained) parameters are
+\[
+  \bW^{(1)} = \begin{bmatrix} 0.5 & -0.5 \\ 0.5 & \phantom{-}0.5 \end{bmatrix},
+  \quad
+  \bb^{(1)} = \begin{bmatrix} 0.5 \\ 0.0 \end{bmatrix},
+  \quad
+  \bW^{(2)} = \begin{bmatrix} 0.5 & 0.5 \end{bmatrix},
+  \quad
+  b^{(2)} = 0.0,
+\]
+where row $i$ of $\bW^{(1)}$ holds the weights \emph{feeding into} hidden
+unit $i$.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{The Sigmoid Activation}
+
+In Section 3.1 we used the \textbf{step function}. Its derivative is $0$
+almost everywhere, so gradient descent would get no signal about which way
+to move the weights. We therefore use its smooth ``S-shaped'' version, the
+\textbf{sigmoid}:
+\[
+  \sigmoid(z) = \frac{1}{1 + e^{-z}}, \qquad \sigmoid(z) \in (0, 1).
+\]
+
+Every hidden and output neuron does two sub-steps:
+\begin{enumerate}[nosep]
+  \item \textbf{Pre-activation} $z$: a weighted sum of inputs plus bias.
+  \item \textbf{Activation} $h = \sigmoid(z)$: squeeze $z$ into $(0,1)$.
+\end{enumerate}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth]
+    % ── Nodes ──────────────────────────────────────────────────────────────────
+    \node[input]    (x1) at (0,    1.4) {$x_1$};
+    \node[input]    (x2) at (0,   -1.4) {$x_2$};
+    \node[preact]   (z1) at (3.6,  1.4) {$z^{(1)}_1$};
+    \node[neuron]   (h1) at (5.6,  1.4) {$h_1$};
+    \node[preact]   (z2) at (3.6, -1.4) {$z^{(1)}_2$};
+    \node[neuron]   (h2) at (5.6, -1.4) {$h_2$};
+    \node[preact]   (zo) at (9.2,  0)   {$z^{(2)}$};
+    \node[neuron]   (yh) at (11.2, 0)   {$\yhat$};
+    \node[lossnode] (J)  at (13.6, 0)   {$J$};
+    \node[input]    (y)  at (13.6, -2.0) {$y$};
+
+    % ── Dashed boxes: one box = one neuron ─────────────────────────────────────
+    \draw[unitbox] (2.85,  0.65) rectangle (6.35,  2.15);
+    \draw[unitbox] (2.85, -2.15) rectangle (6.35, -0.65);
+    \draw[unitbox] (8.45, -0.75) rectangle (11.95, 0.75);
+
+    % ── Connections ────────────────────────────────────────────────────────────
+    \draw[->, thick] (x1) -- node[above, font=\scriptsize] {$w^{(1)}_{11}$} (z1);
+    \draw[->, thick] (x1) -- node[sloped, above, font=\scriptsize, pos=0.28] {$w^{(1)}_{21}$} (z2);
+    \draw[->, thick] (x2) -- node[sloped, below, font=\scriptsize, pos=0.28] {$w^{(1)}_{12}$} (z1);
+    \draw[->, thick] (x2) -- node[below, font=\scriptsize] {$w^{(1)}_{22}$} (z2);
+    \draw[->, thick, mainblue] (z1) -- node[above, font=\small] {$\sigmoid$} (h1);
+    \draw[->, thick, mainblue] (z2) -- node[above, font=\small] {$\sigmoid$} (h2);
+    \draw[->, thick, mainblue] (zo) -- node[above, font=\small] {$\sigmoid$} (yh);
+    \draw[->, thick] (h1) -- node[above right, font=\scriptsize, pos=0.45] {$w^{(2)}_1$} (zo);
+    \draw[->, thick] (h2) -- node[below right, font=\scriptsize, pos=0.45] {$w^{(2)}_2$} (zo);
+    \draw[->, thick, red!70!black] (yh) -- (J);
+    \draw[->, thick, red!70!black] (y)  -- (J);
+
+    % ── Annotations ────────────────────────────────────────────────────────────
+    \node[font=\scriptsize, gray!80!black] at (3.6,  2.45) {$+\,b^{(1)}_1$};
+    \node[font=\scriptsize, gray!80!black] at (3.6, -2.45) {$+\,b^{(1)}_2$};
+    \node[font=\scriptsize, gray!80!black] at (9.2,  1.05) {$+\,b^{(2)}$};
+    \node[font=\scriptsize, red!70!black] at (13.6, 0.95) {$J = (y - \yhat)^2$};
+    \node[font=\scriptsize, gray!80!black, left=0.1cm of y] {target};
+
+    % ── Layer labels ───────────────────────────────────────────────────────────
+    \node[font=\small\itshape, gray] at (0,    3.1) {Input layer};
+    \node[font=\small\itshape, gray] at (4.6,  3.1) {Hidden layer};
+    \node[font=\small\itshape, gray] at (10.2, 3.1) {Output layer};
+    \node[font=\small\itshape, gray] at (13.6, 3.1) {Loss};
+  \end{tikzpicture}
+  \caption{The same network with each neuron (dashed box) split into its
+    pre-activation $z$ (white) and activation (blue). The prediction $\yhat$
+    is compared with the target $y$ to give the loss $J$.}
+  \label{fig:forward-graph}
+\end{figure}
+
+\begin{codebox}
+import numpy as np
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+\end{codebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The Forward Pass}
+
+We feed the XOR input $\bx = (x_1, x_2) = (0, 1)$, whose target is $y = 1$.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\begin{stepbox}{Step 1 \quad Hidden layer}
+  Weighted sums entering each hidden neuron:
+  \begin{align*}
+    z^{(1)}_1 & = w^{(1)}_{11}x_1 + w^{(1)}_{12}x_2 + b^{(1)}_1
+    = (0.5)(0) + (-0.5)(1) + 0.5 = \sol[2.5cm]{0.0}             \\
+    z^{(1)}_2 & = w^{(1)}_{21}x_1 + w^{(1)}_{22}x_2 + b^{(1)}_2
+    = (0.5)(0) + (0.5)(1) + 0.0 = \sol[2.5cm]{0.5}
+  \end{align*}
+  Apply the sigmoid:
+  \[
+    h_1 = \sigmoid(z^{(1)}_1) = \sol[2.5cm]{0.500},
+    \qquad
+    h_2 = \sigmoid(z^{(1)}_2) = \sol[2.5cm]{0.622}
+  \]
+\end{stepbox}
+
+\vspace{0.8em}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\begin{stepbox}{Step 2 \quad Output layer}
+  \[
+    z^{(2)} = w^{(2)}_1 h_1 + w^{(2)}_2 h_2 + b^{(2)}
+    = (0.5)(0.500) + (0.5)(0.622) + 0.0 = \sol[2.5cm]{0.561}
+  \]
+  \[
+    \yhat = \sigmoid(z^{(2)}) = \sol[2.5cm]{0.637}
+  \]
+\end{stepbox}
+
+\vspace{0.8em}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\begin{stepbox}{Step 3 \quad Loss}
+  Using the squared error:
+  \[
+    J = (y - \yhat)^2 = (1 - 0.637)^2 \approx \sol[2.5cm]{0.132}
+  \]
+\end{stepbox}
+
+The network outputs $0.637$ when it should output $1$. A perfect prediction
+would give $J = 0$. Our goal now is to change the weights so that $J$ goes
+down.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Backpropagation: The Idea}
+
+Gradient descent (Section 3.2) updates every parameter with
+\[
+  w \;\longleftarrow\; w - \eta \,\pd{J}{w}.
+\]
+So we need $\partial J / \partial w$ for \emph{every} weight and bias:
+nine numbers for our small network, and millions for a real one.
+The difficulty is that the loss depends on a weight only \emph{indirectly},
+through a chain of intermediate values:
+\[
+  w^{(1)}_{12} \;\to\; z^{(1)}_1 \;\to\; h_1 \;\to\; z^{(2)}
+  \;\to\; \yhat \;\to\; J.
+\]
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{The Chain Rule}
+
+If $y$ depends on $u$, and $u$ depends on $x$, then
+\[
+  \frac{dy}{dx} = \frac{dy}{du} \cdot \frac{du}{dx}.
+\]
+Longer chains simply multiply more factors.
+
+\begin{example}
+  Let $y = (2x+1)^2$. Write $u = 2x+1$ so that $y = u^2$:
+  \[
+    \frac{dy}{dx}
+    = \underbrace{\frac{dy}{du}}_{2u}
+    \cdot
+    \underbrace{\frac{du}{dx}}_{2}
+    = \sol[4cm]{4(2x+1)}.
+  \]
+\end{example}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Walking Backwards Through the Network}
+
+Each arrow in Figure~\ref{fig:forward-graph} is a simple function whose
+derivative is easy (a weighted sum or a sigmoid). The chain rule says:
+\begin{center}
+  \emph{the gradient of $J$ with respect to a weight is the product of the
+    local derivatives along the path from $J$ back to that weight.}
+\end{center}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth]
+    % ── Nodes ──────────────────────────────────────────────────────────────────
+    \node[input]    (x1) at (0,    1.4) {$x_1$};
+    \node[input]    (x2) at (0,   -1.4) {$x_2$};
+    \node[preact]   (z1) at (3.6,  1.4) {$z^{(1)}_1$};
+    \node[neuron]   (h1) at (5.6,  1.4) {$h_1$};
+    \node[preact]   (z2) at (3.6, -1.4) {$z^{(1)}_2$};
+    \node[neuron]   (h2) at (5.6, -1.4) {$h_2$};
+    \node[preact]   (zo) at (9.2,  0)   {$z^{(2)}$};
+    \node[neuron]   (yh) at (11.2, 0)   {$\yhat$};
+    \node[lossnode] (J)  at (13.6, 0)   {$J$};
+
+    % ── Forward connections (faded) ────────────────────────────────────────────
+    \foreach \a/\b in {x1/z1, x1/z2, x2/z1, x2/z2, z1/h1, z2/h2,
+        h1/zo, h2/zo, zo/yh, yh/J}
+    \draw[->, gray!50] (\a) -- (\b);
+
+    % ── Backward (chain-rule) arrows ───────────────────────────────────────────
+    \draw[back] (J)  to[bend right=40] node[above, font=\scriptsize] {$\pd{J}{\yhat}$} (yh);
+    \draw[back] (yh) to[bend right=40] node[above, font=\scriptsize] {$\pd{\yhat}{z^{(2)}}$} (zo);
+    \draw[back] (zo) to[bend right=25] node[above right, font=\scriptsize] {$\pd{z^{(2)}}{h_1}$} (h1);
+    \draw[back] (zo) to[bend left=25]  node[below right, font=\scriptsize] {$\pd{z^{(2)}}{h_2}$} (h2);
+    \draw[back] (h1) to[bend right=45] node[above, font=\scriptsize] {$\pd{h_1}{z^{(1)}_1}$} (z1);
+    \draw[back] (h2) to[bend left=45]  node[below, font=\scriptsize] {$\pd{h_2}{z^{(1)}_2}$} (z2);
+  \end{tikzpicture}
+  \caption{Backpropagation runs the forward graph in reverse. Starting from
+    $J$, it multiplies the local derivative on each dashed arrow. Paths share
+    their first links ($J \to \yhat \to z^{(2)}$), so those products are
+    computed once and reused for every weight further back.}
+  \label{fig:backward-graph}
+\end{figure}
+
+For example, the gradient for $w^{(1)}_{12}$ is the product along its path:
+\[
+  \pd{J}{w^{(1)}_{12}}
+  =
+  \underbrace{\pd{J}{\yhat}}_{2(\yhat - y)}
+  \cdot
+  \underbrace{\pd{\yhat}{z^{(2)}}}_{\sigmoid'(z^{(2)})}
+  \cdot
+  \underbrace{\pd{z^{(2)}}{h_1}}_{w^{(2)}_1}
+  \cdot
+  \underbrace{\pd{h_1}{z^{(1)}_1}}_{\sigmoid'(z^{(1)}_1)}
+  \cdot
+  \underbrace{\pd{z^{(1)}_1}{w^{(1)}_{12}}}_{x_2}.
+\]
+
+\begin{patternbox}
+  \textbf{What to remember about backpropagation.}
+  \begin{enumerate}[nosep]
+    \item It starts at the loss with the \textbf{error}
+          $\pd{J}{\yhat} = 2(\yhat - y)$, i.e.\ ``prediction minus target''.
+    \item Moving back one layer multiplies in that layer's weight and one
+          activation slope $\sigmoid'(z)$. For the sigmoid,
+          $\sigmoid'(z) = \sigmoid(z)\bigl(1-\sigmoid(z)\bigr) \le 0.25$.
+    \item At the end, each weight's gradient is
+          \[
+            \pd{J}{w} = (\text{error signal at its neuron})
+            \times (\text{input to that weight}).
+          \]
+          A weight whose input is $0$ gets zero gradient: it had no effect on
+          this prediction.
+  \end{enumerate}
+\end{patternbox}
+
+\begin{notebox}
+  \textbf{Nobody does this by hand.} Deep-learning libraries record the
+  forward pass and apply the chain rule automatically
+  (\emph{automatic differentiation}). In PyTorch, for example, a single
+  call to \texttt{loss.backward()} fills in $\partial J/\partial w$ for
+  every parameter.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{One Update Step}
+
+Running backpropagation on our input $(0, 1)$ and applying
+$w \leftarrow w - \eta\,\partial J/\partial w$ with learning rate
+$\eta = 0.1$ gives the following new parameters:
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.4}
+  \begin{tabular}{lrrr}
+    \toprule
+    Parameter      & Old              & Gradient $\partial J/\partial(\cdot)$ & New                \\
+    \midrule
+    $w^{(2)}_1$    & $\phantom{-}0.5$ & $-0.084$                              & $\phantom{-}0.508$ \\
+    $w^{(2)}_2$    & $\phantom{-}0.5$ & $-0.105$                              & $\phantom{-}0.510$ \\
+    $b^{(2)}$      & $\phantom{-}0.0$ & $-0.168$                              & $\phantom{-}0.017$ \\
+    \midrule
+    $w^{(1)}_{11}$ & $\phantom{-}0.5$ & $\phantom{-}0.000$                    & $\phantom{-}0.500$ \\
+    $w^{(1)}_{12}$ & $-0.5$           & $-0.021$                              & $-0.498$           \\
+    $b^{(1)}_1$    & $\phantom{-}0.5$ & $-0.021$                              & $\phantom{-}0.502$ \\
+    \midrule
+    $w^{(1)}_{21}$ & $\phantom{-}0.5$ & $\phantom{-}0.000$                    & $\phantom{-}0.500$ \\
+    $w^{(1)}_{22}$ & $\phantom{-}0.5$ & $-0.020$                              & $\phantom{-}0.502$ \\
+    $b^{(1)}_2$    & $\phantom{-}0.0$ & $-0.020$                              & $\phantom{-}0.002$ \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+Notice that:
+\begin{itemize}[nosep]
+  \item All non-zero gradients are \textbf{negative}, so every parameter that
+        moves goes \emph{up}, which pushes $\yhat$ up towards $y = 1$.
+  \item $w^{(1)}_{11}$ and $w^{(1)}_{21}$ have zero gradient because their
+        input is $x_1 = 0$, so they stay put.
+  \item The output-layer gradients are larger than the hidden-layer ones:
+        each step back multiplies in another factor $\sigmoid'(z) \le 0.25$.
+\end{itemize}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Did the Loss Go Down?}
+
+Run the forward pass again on the same input $(x_1, x_2) = (0, 1)$, this
+time with the \textbf{new} parameters.
+
+\begin{stepbox}{Step 1 \quad Hidden layer}
+  \begin{align*}
+    z^{(1)}_1 & = (0.500)(0) + (-0.498)(1) + 0.502 = \sol[2.5cm]{0.004} \\
+    z^{(1)}_2 & = (0.500)(0) + (0.502)(1) + 0.002 = \sol[2.5cm]{0.504}
+  \end{align*}
+  \[
+    h_1 = \sigmoid(z^{(1)}_1) = \sol[2.5cm]{0.501},
+    \qquad
+    h_2 = \sigmoid(z^{(1)}_2) = \sol[2.5cm]{0.623}
+  \]
+\end{stepbox}
+
+\vspace{0.8em}
+
+\begin{stepbox}{Step 2 \quad Output layer}
+  \[
+    z^{(2)} = (0.508)(0.501) + (0.510)(0.623) + 0.017 = \sol[2.5cm]{0.589}
+  \]
+  \[
+    \yhat = \sigmoid(z^{(2)}) = \sol[2.5cm]{0.643}
+  \]
+\end{stepbox}
+
+\vspace{0.8em}
+
+\begin{stepbox}{Step 3 \quad Loss}
+  \[
+    J = (1 - 0.643)^2 \approx \sol[2.5cm]{0.127}
+  \]
+\end{stepbox}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.4}
+  \begin{tabular}{lcc}
+    \toprule
+    Quantity           & Before update & After update         \\
+    \midrule
+    Prediction $\yhat$ & $0.637$       & \sol[1.6cm]{$0.643$} \\
+    Loss $J$           & $0.132$       & \sol[1.6cm]{$0.127$} \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+After one step the prediction has moved closer to the target and the loss
+has dropped. The change is small, but repeating it many times is what
+training \emph{is}.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The Training Loop}
+
+\begin{center}
+  \begin{tikzpicture}[
+      box/.style={draw=mainblue, fill=boxbg, rounded corners=4pt,
+          minimum width=3.8cm, minimum height=1.4cm,
+          font=\normalsize, align=center, thick},
+      flow/.style={->, thick, mainblue},
+      >=Stealth
+    ]
+    \node[box] (fwd)  at (0,    0)   {Forward pass};
+    \node[box] (loss) at (5.2,  0)   {Compute loss\\$J = (y-\yhat)^2$};
+    \node[box] (bwd)  at (10.4, 0)   {Backpropagation};
+    \node[box] (upd)  at (5.2, -3.0) {Gradient descent\\update};
+
+    \draw[flow] (fwd)  -- node[above, font=\small, black] {$\yhat$} (loss);
+    \draw[flow] (loss) -- node[above, font=\small, black] {$J$} (bwd);
+    \draw[flow] (bwd.south) |- node[pos=0.25, right, font=\small, black]
+      {$\pd{J}{w},\ \pd{J}{b}$} (upd.east);
+    \draw[flow] (upd.west) -| node[pos=0.75, left, font=\small, black]
+      {new $w,\, b$} (fwd.south);
+  \end{tikzpicture}
+\end{center}
+
+\begin{warnbox}
+  \textbf{One forward--backward pass uses one input.}
+  In practice we cycle through all four XOR inputs (or use mini-batches),
+  average the gradients, and take one update step per batch. After hundreds
+  or thousands of such cycles the network correctly classifies all four
+  XOR inputs.
+\end{warnbox}
+
+
+\end{document}
