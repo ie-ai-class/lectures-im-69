@@ -58,5 +58,9 @@
 
 - Exercise: [PDF](/src/T03_ffn_basics/S4/mlp_student.pdf)
 - Solution: [PDF](/src/T03_ffn_basics/S4/mlp_solution.pdf)
-- Resources: Not available
+- Resources:
+  - [XOR Regression](https://github.com/ie-ai-class/codes-im-69/blob/main/src/T03_ffn_basics/S41_XOR_regression.py)
+  - [XOR Classification](https://github.com/ie-ai-class/codes-im-69/blob/main/src/T03_ffn_basics/S42_XOR_classification.py)
+  - [Diabetes Progression Prediction](https://github.com/ie-ai-class/codes-im-69/blob/main/src/T03_ffn_basics/S43_regression.ipynb)
+  - [Iris Species Prediction](https://github.com/ie-ai-class/codes-im-69/blob/main/src/T03_ffn_basics/S44_classification.ipynb)
 - Lecture: Not available
