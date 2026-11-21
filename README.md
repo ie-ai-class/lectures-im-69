@@ -64,3 +64,15 @@
   - [Diabetes Progression Prediction](https://github.com/ie-ai-class/codes-im-69/blob/main/src/T03_ffn_basics/S43_regression.ipynb)
   - [Iris Species Prediction](https://github.com/ie-ai-class/codes-im-69/blob/main/src/T03_ffn_basics/S44_classification.ipynb)
 - Lecture: Not available
+
+## Convolutional Neural Network
+
+### CNN Basics
+
+- Exercise: [PDF](/src/T04_cnn/R1/cnn_basics_student.pdf)
+- Solution: [PDF](/src/T04_cnn/R1/cnn_basics_solution.pdf)
+
+### CNN Architecture and Vision Tasks
+
+- Exercise: [PDF](/src/T04_cnn/R2/architectures_vision_student.pdf)
+- Solution: [PDF](/src/T04_cnn/R2/architectures_vision_solution.pdf)
