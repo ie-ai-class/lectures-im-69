@@ -83,7 +83,7 @@ pixels to $[0, 1]$ by dividing by $255$.
             \fi
           }
       }
-    \draw[gray!60] (0,0) grid (6,-6);
+    \draw[gray!60, step=1] (0,0) grid (6,-6);
     \draw[thick] (0,0) rectangle (6,-6);
     \draw[brace] (0,0.15) -- node[above=4pt, font=\small] {$W = 6$} (6,0.15);
     \draw[brace] (-0.15,-6) -- node[left=4pt, font=\small] {$H = 6$} (-0.15,0);
@@ -99,8 +99,8 @@ pixels to $[0, 1]$ by dividing by $255$.
         }
       \draw[brace] (4.4,-4.55) -- node[below=4pt, font=\small] {$W$} (0,-4.55);
       \draw[brace] (-0.15,-4.4) -- node[left=4pt, font=\small] {$H$} (-0.15,0);
-      \draw[brace] (4.6,-4.35) -- node[right=5pt, font=\small] {$C = 3$}
-      (5.6,-3.35);
+      \draw[brace] (5.55,-3.55) -- node[below right=2pt, font=\small] {$C = 3$}
+      (4.55,-4.55);
       \node[layerlabel] at (2.6,-6.0) {colour: three channels};
     \end{scope}
   \end{tikzpicture}

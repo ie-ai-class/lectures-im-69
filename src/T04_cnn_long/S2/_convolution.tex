@@ -235,6 +235,15 @@ zero.
   layer, many turn out to be edge and colour detectors very much like these.
 \end{notebox}
 
+\begin{notebox}
+  \textbf{Try it.} The interactive \emph{Convolution Demo} by deeplizard
+  (\url{https://deeplizard.com/resource/pavq7noze2}) slides a $3 \times 3$
+  edge filter over real images of handwritten digits or clothing. Choose the
+  Prewitt filters from above, step through the image, and hover over an
+  output pixel to see the input window and the sum of element-wise products
+  that produced it.
+\end{notebox}
+
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Padding}
 
@@ -386,6 +395,14 @@ dimensions it is applied to the height and the width separately.
   \end{center}
   The last row is the first layer of ResNet (Section 4.4).
 \end{stepbox}
+
+\begin{notebox}
+  \textbf{Try it.} The page
+  \url{https://hannibunny.github.io/mlbook/neuralnetworks/convolutionDemos.html}
+  animates a $3 \times 3$ kernel sliding over an input for padding $p = 0$ or
+  $1$ and stride $s = 1$ or $2$. Check each animation against the output-size
+  formula above.
+\end{notebox}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Channels}

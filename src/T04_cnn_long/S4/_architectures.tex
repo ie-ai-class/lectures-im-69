@@ -13,6 +13,8 @@
 
 % ── Local TikZ styles (match S1–S3) ───────────────────────────────────────────
 \usetikzlibrary{decorations.pathreplacing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 \tikzset{
   layerlabel/.style={font=\small\itshape, gray},
   opbox/.style={draw=orange!70!black, fill=notebg, thick, rounded corners=4pt,
@@ -33,12 +35,30 @@
   \node[below, font=\scriptsize, align=center] at (#1+#2/2,-1.75) {#5};
 }
 
+% \chstack{<x>}{<y>}{<size>}{<colour list, back to front>}
+%   a stack of square feature maps / filter slices, offset diagonally
+\newcommand{\chstack}[4]{%
+  \foreach \col [count=\i from 0] in {#4} {
+      \filldraw[fill=\col!25, draw=\col!80!black]
+      (#1+0.15*\i, #2-0.15*\i) rectangle ++(#3, #3);
+    }%
+}
+
+% \bubble{<GFLOPs>}{<top-1>}{<radius pt>}{<colour>}{<label>}{<label anchor>}
+%   one model in the bubble chart; radius = 1.6pt * sqrt(params in millions),
+%   so the circle's area is proportional to the number of parameters
+\newcommand{\bubble}[6]{%
+  \fill[#4, fill opacity=0.35] (axis cs:#1,#2) circle[radius=#3pt];
+  \draw[#4!80!black, thin] (axis cs:#1,#2) circle[radius=#3pt];
+  \node[font=\scriptsize, anchor=#6, inner sep=2pt] at (axis cs:#1,#2) {#5};
+}
+
 % ── Document ──────────────────────────────────────────────────────────────────
 \begin{document}
 
 \begin{center}
   {\LARGE \textbf{Section 4.4: Famous CNN Architectures}} \\[0.3em]
-  {\large\itshape From LeNet-5 to ResNet, and Transfer Learning} \\[0.5em]
+  {\large\itshape From LeNet-5 to ConvNeXt, and Transfer Learning} \\[0.5em]
   {\large AI-IM Class --- Lecture Notes}%
   \ifstudentmode
     \quad {\normalsize\color{gray}[Student Copy]}%
@@ -58,7 +78,10 @@ In this section we
   \item trace LeNet-5, the first successful CNN, layer by layer,
   \item follow the ImageNet competition that made CNNs famous,
   \item study the key idea of AlexNet, VGG, GoogLeNet and ResNet, with a hand
-        calculation for each, and
+        calculation for each,
+  \item see how later networks became small enough for phones and cameras
+        (MobileNet, EfficientNet) and where vision transformers fit in,
+  \item compare all of them by accuracy, size and computing cost, and
   \item reuse a pretrained network for our own problem (\emph{transfer
           learning}).
 \end{itemize}
@@ -109,21 +132,23 @@ connected to all 6 input channels, and a linear output layer.
     \renewcommand{\arraystretch}{1.35}
     \begin{tabular}{llll}
       \toprule
-      Layer                 & Operation                    & Output shape                  & Parameters                                     \\
+      Layer                     & Operation              & Output shape                & Parameters                                     \\
       \midrule
-      Input                 &                              & $(1, 32, 32)$                 & ---                                            \\
-      C1                    & 6 filters $5\times5$         & $\sol[2.2cm]{(6, 28, 28)}$    & $\sol[4.6cm]{(1\cdot25+1)\cdot6 = 156}$        \\
-      S2                    & avg pool $2\times2$          & $\sol[2.2cm]{(6, 14, 14)}$    & $\sol[4.6cm]{0}$                               \\
-      C3                    & 16 filters $5\times5$        & $\sol[2.2cm]{(16, 10, 10)}$   & $\sol[4.6cm]{(6\cdot25+1)\cdot16 = 2\,416}$    \\
-      S4                    & avg pool $2\times2$          & $\sol[2.2cm]{(16, 5, 5)}$     & $\sol[4.6cm]{0}$                               \\
-      C5                    & 120 filters $5\times5$       & $\sol[2.2cm]{(120, 1, 1)}$    & $\sol[4.6cm]{(16\cdot25+1)\cdot120 = 48\,120}$ \\
-      F6                    & linear                       & $(84)$                        & $\sol[4.6cm]{(120+1)\cdot84 = 10\,164}$        \\
-      Output                & linear                       & $(10)$                        & $\sol[4.6cm]{(84+1)\cdot10 = 850}$             \\
+      Input                     &                        & $(1, 32, 32)$               & ---                                            \\
+      C1                        & 6 filters $5\times5$   & $\sol[2.2cm]{(6, 28, 28)}$  & $\sol[4.6cm]{(1\cdot25+1)\cdot6 = 156}$        \\
+      S2                        & avg pool $2\times2$    & $\sol[2.2cm]{(6, 14, 14)}$  & $\sol[4.6cm]{0}$                               \\
+      C3                        & 16 filters $5\times5$  & $\sol[2.2cm]{(16, 10, 10)}$ & $\sol[4.6cm]{(6\cdot25+1)\cdot16 = 2\,416}$    \\
+      S4                        & avg pool $2\times2$    & $\sol[2.2cm]{(16, 5, 5)}$   & $\sol[4.6cm]{0}$                               \\
+      C5                        & 120 filters $5\times5$ & $\sol[2.2cm]{(120, 1, 1)}$  & $\sol[4.6cm]{(16\cdot25+1)\cdot120 = 48\,120}$ \\
+      F6                        & linear                 & $(84)$                      & $\sol[4.6cm]{(120+1)\cdot84 = 10\,164}$        \\
+      Output                    & linear                 & $(10)$                      & $\sol[4.6cm]{(84+1)\cdot10 = 850}$             \\
       \midrule
-      \multicolumn{3}{l}{Total}                                                            & $\sol[4.6cm]{61\,706}$                         \\
+      \multicolumn{3}{l}{Total} & $\sol[4.6cm]{61\,706}$                                                                                \\
       \bottomrule
     \end{tabular}
   \end{center}
+
+  \vspace{0.8em}
   Why is C5 called a convolution although it behaves like a fully connected
   layer?
   \soleq[1.2cm]{\parbox{0.85\linewidth}{\raggedright Its $5\times5$ kernel
@@ -148,7 +173,9 @@ The \textbf{ImageNet Large Scale Visual Recognition Challenge (ILSVRC)} ran
 from 2010 to 2017. Its classification task had about 1.2 million training
 images in 1\,000 classes. Performance is measured by the \textbf{top-5 error}:
 a prediction counts as correct if the true class is among the model's five
-most probable classes.
+most probable classes. The stricter \textbf{top-1 accuracy} counts only the
+single most probable class. Papers after the competition ended usually report
+top-1 accuracy, and so does our comparison in Section~\ref{sec:comparison}.
 
 \begin{figure}[H]
   \centering
@@ -160,22 +187,23 @@ most probable classes.
     \draw[red!70!black, dashed, thick] (0.4,5.1) -- (8.6,5.1)
     node[right, font=\scriptsize, align=left] {human\\$\approx 5.1$};
     \foreach \i/\yr/\e/\name/\col in {
-        1/2010/28.2/{}/gray,
-        2/2011/25.8/{}/gray,
-        3/2012/16.4/AlexNet/mainblue,
-        4/2013/11.7/ZFNet/mainblue,
-        5/2014/6.7/GoogLeNet/mainblue,
-        6/2015/3.6/ResNet/mainblue,
-        7/2016/3.0/{}/mainblue,
-        8/2017/2.3/SENet/mainblue} {
-        \filldraw[fill=\col!40, draw=\col!80!black] (\i-0.3,0) rectangle (\i+0.3,\e);
-        \node[above, font=\scriptsize, fill=white, inner sep=1pt] at (\i,\e+0.4) {\e};
-        \node[below, font=\scriptsize] at (\i,0) {\yr};
-        \node[below, font=\scriptsize\itshape, gray] at (\i,-2.8) {\name};
-      }
+    1/2010/28.2/{}/gray,
+    2/2011/25.8/{}/gray,
+    3/2012/16.4/AlexNet/mainblue,
+    4/2013/11.7/ZFNet/mainblue,
+    5/2014/6.7/GoogLeNet/mainblue,
+    6/2015/3.6/ResNet/mainblue,
+    7/2016/3.0/{}/mainblue,
+    8/2017/2.3/SENet/mainblue} {
+    \filldraw[fill=\col!40, draw=\col!80!black] (\i-0.3,0) rectangle (\i+0.3,\e);
+    \node[above, font=\scriptsize, fill=white, inner sep=1pt] at (\i,\e+0.4) {\e};
+    \node[below, font=\scriptsize] at (\i,0) {\yr};
+    \node[below, font=\scriptsize\itshape, gray] at (\i,-2.8) {\name};
+    }
   \end{tikzpicture}
   \caption{Winning top-5 error in the ILSVRC classification task. Grey: methods
-    based on hand-designed features; blue: CNNs. The human estimate is
+    based on hand-designed features; blue: CNNs. The 2016 winner combined
+    existing networks rather than introducing a new one. The human estimate is
     Andrej Karpathy's result on a test sample.}
   \label{fig:ilsvrc}
 \end{figure}
@@ -211,6 +239,11 @@ made it work were practical choices that are still standard today:
   \end{enumerate}
 \end{stepbox}
 
+The 2013 winner, \textbf{ZFNet} (Zeiler and Fergus), kept AlexNet's design
+but used a smaller $7 \times 7$ first-layer kernel with stride $2$. They found
+this change by \emph{visualising} what each layer had learned, the method
+behind the feature hierarchy in Section 4.3.
+
 % ══════════════════════════════════════════════════════════════════════════════
 \section{VGG (2014): Only Small Kernels}
 
@@ -230,12 +263,12 @@ one more ReLU.
     \renewcommand{\arraystretch}{1.4}
     \begin{tabular}{lccc}
       \toprule
-      Option                     & Receptive field       & Weights            & Weights for $C = 64$ \\
+      Option                  & Receptive field         & Weights              & Weights for $C = 64$  \\
       \midrule
-      one $5\times5$ layer       & $5\times5$            & $\sol[1.4cm]{25C^2}$ & $\sol[2cm]{102\,400}$ \\
-      two $3\times3$ layers      & $\sol[1.4cm]{5\times5}$ & $\sol[1.4cm]{18C^2}$ & $\sol[2cm]{73\,728}$  \\
-      one $7\times7$ layer       & $7\times7$            & $\sol[1.4cm]{49C^2}$ & $\sol[2cm]{200\,704}$ \\
-      three $3\times3$ layers    & $\sol[1.4cm]{7\times7}$ & $\sol[1.4cm]{27C^2}$ & $\sol[2cm]{110\,592}$ \\
+      one $5\times5$ layer    & $5\times5$              & $\sol[1.4cm]{25C^2}$ & $\sol[2cm]{102\,400}$ \\
+      two $3\times3$ layers   & $\sol[1.4cm]{5\times5}$ & $\sol[1.4cm]{18C^2}$ & $\sol[2cm]{73\,728}$  \\
+      one $7\times7$ layer    & $7\times7$              & $\sol[1.4cm]{49C^2}$ & $\sol[2cm]{200\,704}$ \\
+      three $3\times3$ layers & $\sol[1.4cm]{7\times7}$ & $\sol[1.4cm]{27C^2}$ & $\sol[2cm]{110\,592}$ \\
       \bottomrule
     \end{tabular}
   \end{center}
@@ -256,8 +289,8 @@ channel dimension.
 
 \begin{figure}[H]
   \centering
-  \begin{tikzpicture}[>=Stealth, x=2.6cm, y=1.15cm]
-    \node[opbox, minimum width=3cm] (in) at (1.5, 3) {previous layer};
+  \begin{tikzpicture}[>=Stealth, x=3.2cm, y=1.4cm]
+    \node[opbox, minimum width=3cm] (in) at (1.5, 3.4) {previous layer};
     \node[convbox] (a1) at (0, 1.5) {$1\times1$};
     \node[convbox] (b1) at (1, 2) {$1\times1$};
     \node[convbox] (b2) at (1, 1) {$3\times3$};
@@ -265,7 +298,7 @@ channel dimension.
     \node[convbox] (c2) at (2, 1) {$5\times5$};
     \node[opbox, minimum width=1.6cm] (d1) at (3, 2) {$3\times3$\\[-2pt]\scriptsize max pool};
     \node[convbox] (d2) at (3, 1) {$1\times1$};
-    \node[opbox, minimum width=3cm] (out) at (1.5, -0.3) {concatenate channels};
+    \node[opbox, minimum width=3cm] (out) at (1.5, -0.5) {concatenate channels};
     \draw[->] (in) -- (a1); \draw[->] (in) -- (b1);
     \draw[->] (in) -- (c1); \draw[->] (in) -- (d1);
     \draw[->] (b1) -- (b2); \draw[->] (c1) -- (c2); \draw[->] (d1) -- (d2);
@@ -381,33 +414,310 @@ are now everywhere in deep learning, including the transformers behind
 large language models.
 
 % ══════════════════════════════════════════════════════════════════════════════
-\section{Comparison}
+\section{Efficient Networks (2016--2019): Small and Fast}
 
-\begin{center}
-  \renewcommand{\arraystretch}{1.35}
-  \begin{tabular}{lcrrrl}
-    \toprule
-    Network      & Year & Layers & Parameters & Top-5 error & Key idea                      \\
-    \midrule
-    LeNet-5      & 1998 & 5      & 60\,K      & ---         & conv + pool + dense           \\
-    AlexNet      & 2012 & 8      & 60\,M      & 16.4\%      & ReLU, GPUs, augmentation      \\
-    VGG-16       & 2014 & 16     & 138\,M     & 7.3\%       & stacks of $3\times3$ kernels  \\
-    GoogLeNet    & 2014 & 22     & 7\,M       & 6.7\%       & Inception, $1\times1$ bottleneck \\
-    ResNet-152   & 2015 & 152    & 60\,M      & 3.6\%       & skip connections              \\
-    \bottomrule
-  \end{tabular}
-\end{center}
+After ResNet, ImageNet accuracy kept rising, but a new question became just
+as important: can the network run on a phone, a drone or a smart camera on a
+production line? Such devices have little memory and no large GPU, and a
+camera that inspects 30 parts per second has about 30\,ms per image. Two
+numbers measure the cost of a network:
+\begin{itemize}[nosep]
+  \item the number of \textbf{parameters}, which sets the memory needed to
+        store the model (4 bytes each in 32-bit floating point);
+  \item the number of \textbf{multiply--adds} needed to classify one image,
+        which sets the running time and energy. It is usually reported in
+        \textbf{GFLOPs} (billions of operations).
+\end{itemize}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{SqueezeNet (2016): AlexNet Accuracy in 5 MB}
+
+\textbf{SqueezeNet} (Iandola et al.) takes the $1\times1$ bottleneck of
+GoogLeNet to the extreme. Its \emph{fire module} first \emph{squeezes} the
+channels with a few $1\times1$ filters, then \emph{expands} them again with a
+mix of $1\times1$ and $3\times3$ filters. The network has no large fully
+connected layers. It matches AlexNet's accuracy with about 1.2 million
+parameters, roughly 50 times fewer, so the whole model fits in less than
+5\,MB.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{MobileNet (2017): Depthwise Separable Convolutions}
+
+A standard convolution does two jobs at once: each filter looks at a
+$k \times k$ neighbourhood (\emph{spatial} filtering) \emph{and} combines all
+$C_{\text{in}}$ input channels (\emph{channel} mixing). \textbf{MobileNet}
+(Howard et al., Google) splits the two jobs into two cheaper layers:
+\begin{enumerate}[nosep]
+  \item a \textbf{depthwise} convolution: one $k \times k$ filter \emph{per
+          input channel}, applied to that channel only. It filters space but
+        mixes no channels, and gives $C_{\text{in}}$ output maps;
+  \item a \textbf{pointwise} convolution: an ordinary $1 \times 1$
+        convolution with $C_{\text{out}}$ filters. It mixes channels but
+        looks at one pixel only.
+\end{enumerate}
+Together they are called a \textbf{depthwise separable convolution}.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, font=\small]
+    % ── (a) standard convolution ─────────────────────────────────────────────
+    % labels hang from y = -0.8, below the lowest drawing (y = -0.5)
+    \tikzset{steplabel/.style={layerlabel, anchor=north, align=center}}
+    \node[anchor=west, font=\small\bfseries] at (-0.2, 2.2) {(a) Standard convolution};
+    \chstack{0}{0}{1.4}{orange, mainblue, green!60!black}
+    \node[steplabel] at (0.85,-0.8) {input\\$C_{\text{in}} = 3$};
+    \draw[->, thick] (2.0,0.35) -- (3.3,0.35);
+    \chstack{3.6}{0.2}{0.6}{orange, mainblue, green!60!black}
+    \node[font=\small] at (5.0,0.35) {$\times\,4$};
+    \node[steplabel] at (4.25,-0.8) {4 filters, each\\$k \times k \times C_{\text{in}}$};
+    \draw[->, thick] (5.5,0.35) -- (6.8,0.35);
+    \chstack{7.1}{0}{1.4}{gray, gray, gray, gray}
+    \node[steplabel] at (8.0,-0.8) {output\\$C_{\text{out}} = 4$};
+    \node[anchor=west, align=left] at (10.0,0.35) {weights:\\$k^2\, C_{\text{in}}\, C_{\text{out}}$};
+
+    % ── (b) depthwise separable convolution ──────────────────────────────────
+    \begin{scope}[yshift=-4.8cm]
+      \node[anchor=west, font=\small\bfseries] at (-0.2, 2.2) {(b) Depthwise separable convolution};
+      \chstack{0}{0}{1.4}{orange, mainblue, green!60!black}
+      \node[steplabel] at (0.85,-0.8) {input\\$C_{\text{in}} = 3$};
+      \draw[->, thick] (2.0,0.35) -- (3.0,0.35);
+      \filldraw[fill=orange!25, draw=orange!80!black] (3.3,1.0) rectangle ++(0.5,0.5);
+      \filldraw[fill=mainblue!25, draw=mainblue!80!black] (3.3,0.25) rectangle ++(0.5,0.5);
+      \filldraw[fill=green!60!black!25, draw=green!60!black!80!black] (3.3,-0.5) rectangle ++(0.5,0.5);
+      \node[steplabel] at (3.55,-0.8) {depthwise:\\one $k\times k$\\per channel};
+      \draw[->, thick] (4.1,0.35) -- (5.1,0.35);
+      \chstack{5.4}{0}{1.4}{orange, mainblue, green!60!black}
+      \node[steplabel] at (6.25,-0.8) {still\\$C_{\text{in}}$ maps};
+      \draw[->, thick] (7.4,0.35) -- (8.4,0.35);
+      \chstack{8.7}{0.3}{0.3}{orange, mainblue, green!60!black}
+      \node[font=\small] at (9.75,0.35) {$\times\,4$};
+      \node[steplabel] at (9.1,-0.8) {pointwise:\\4 filters, each\\$1\times1\times C_{\text{in}}$};
+      \draw[->, thick] (10.2,0.35) -- (11.2,0.35);
+      \chstack{11.5}{0}{1.4}{gray, gray, gray, gray}
+      \node[steplabel] at (12.4,-0.8) {output\\$C_{\text{out}} = 4$};
+      \node[anchor=north] at (6.7,-2.5)
+      {weights: $\underbrace{k^2\, C_{\text{in}}}_{\text{depthwise}}
+          + \underbrace{C_{\text{in}}\, C_{\text{out}}}_{\text{pointwise}}$};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{(a) Each standard filter covers $k \times k$ pixels in all input
+    channels at once. (b) MobileNet first filters each channel separately with
+    its own $k \times k$ filter (the colours stay separate), then mixes the
+    channels with $1 \times 1$ filters.}
+  \label{fig:depthwise}
+\end{figure}
+
+Ignoring biases, the cost ratio of separable to standard is
+\begin{resultbox}
+  \[
+    \frac{k^2 C_{\text{in}} + C_{\text{in}} C_{\text{out}}}
+    {k^2 C_{\text{in}} C_{\text{out}}}
+    = \frac{1}{C_{\text{out}}} + \frac{1}{k^2}.
+  \]
+  For $3 \times 3$ kernels and the usual 64 to 1\,024 channels this is about
+  $1/9$ to $1/8$: roughly \textbf{8 to 9 times fewer} weights and
+  multiplications, for a small loss in accuracy.
+\end{resultbox}
+
+In PyTorch a depthwise convolution is an ordinary \texttt{nn.Conv2d} with
+\texttt{groups} set to the number of channels, so each filter sees only its
+own channel:
+\begin{codebox}
+separable = nn.Sequential(
+    nn.Conv2d(64, 64, kernel_size=3, padding=1, groups=64),  # depthwise
+    nn.Conv2d(64, 128, kernel_size=1),                       # pointwise
+)
+\end{codebox}
+
+\begin{stepbox}{Exercise 6 \quad Standard vs.\ separable}
+  An input of shape $(64, 56, 56)$ goes through a $3\times3$ convolution with
+  128 output channels, stride 1 and same padding. Ignore biases.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item Standard convolution: $\sol[4.5cm]{9 \cdot 64 \cdot 128 = 73\,728}$
+          weights.
+    \item Depthwise: $\sol[3cm]{9 \cdot 64 = 576}$ weights. \quad
+          Pointwise: $\sol[3.5cm]{64 \cdot 128 = 8\,192}$ weights. \\
+          Total: $\sol[2cm]{8\,768}$, about $\sol[1.2cm]{8.4}$ times fewer.
+    \item Check with the formula: $\dfrac{1}{128} + \dfrac{1}{9} =
+            \sol[2cm]{0.119}$.
+    \item Every weight is used once at each of the $56 \cdot 56 = 3\,136$
+          output positions. Multiplications: standard
+          $\sol[3cm]{\approx 231 \text{ million}}$, separable
+          $\sol[3cm]{\approx 27.5 \text{ million}}$.
+  \end{enumerate}
+\end{stepbox}
+
+MobileNet is a VGG-like stack of such separable layers. \textbf{MobileNetV2}
+(2018) adds ResNet's skip connections, and \textbf{MobileNetV3} (2019) was
+tuned by an automated search over layer sizes. MobileNetV3-Large reaches
+74.0\% top-1 accuracy with 0.22 GFLOPs, almost 20 times less computation than
+ResNet-50 (76.1\%, 4.1 GFLOPs).
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{EfficientNet (2019): Scale Everything Together}
+
+Given more computing power, how should a network grow: deeper (more layers),
+wider (more channels), or with larger input images? Earlier work usually
+picked one. \textbf{EfficientNet} (Tan and Le, Google) grows all three
+together by fixed factors, which they call \textbf{compound scaling}. The
+smallest model, EfficientNet-B0, is built from MobileNet-style blocks; B1 to
+B7 are scaled-up copies of it. EfficientNet-B0 beats ResNet-50 with
+one fifth of the parameters and one tenth of the computation, and B7 reaches
+84.1\%.
 
 \begin{notebox}
-  \textbf{After 2015.} Later designs mostly refine these ideas.
-  \emph{MobileNet} splits each convolution into a per-channel spatial step and
-  a $1\times1$ step so that it runs on phones and embedded cameras.
-  \emph{EfficientNet} scales depth, width and image resolution together.
-  \emph{Vision Transformers} (2020) replace convolution with attention, and
-  \emph{ConvNeXt} (2022) showed that a modernised ResNet is just as good.
-  CNNs remain the default choice when data or computing power is limited,
-  as in most factory applications.
+  \textbf{Squeeze-and-Excitation (SENet, 2017).} The last ILSVRC winner
+  (Hu et al., 2.3\% top-5 error) is not a new architecture but an add-on block
+  for ResNet or Inception that lets the network weight its channels for each
+  image. It \emph{squeezes} every channel to one number with global average
+  pooling (Section 4.3), feeds this vector of length $C$ through a tiny MLP
+  ($C \to C/16 \to C$, ending in a sigmoid), and multiplies each channel by
+  the resulting weight between 0 and 1. A ``fur'' channel can thus be turned
+  up for a dog and down for a car. It costs only a few percent more
+  computation, and MobileNetV3 and EfficientNet use such blocks throughout
+  their networks. Reweighting features depending on the input is an early form of the
+  \emph{attention} used by the transformers below.
 \end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{After 2020: Transformers and Modern CNNs}
+
+\paragraph{Vision Transformer (ViT, 2020).}
+Dosovitskiy et al.\ (Google) removed convolution altogether. A ViT cuts the
+image into patches of $16 \times 16$ pixels, flattens each patch into a
+vector and treats the patches like the words of a sentence. A
+\textbf{transformer}, the same architecture as in large language models,
+processes this sequence. Its \textbf{attention} layers let every patch look at
+every other patch directly, so the receptive field covers the whole image from
+the first layer on. The price is that a ViT has no built-in idea that nearby
+pixels belong together (Section 4.1): it must learn this from data. Trained on
+ImageNet alone it is no better than a good CNN; pretrained on hundreds of
+millions of images it gives the best results.
+
+\paragraph{ConvNeXt (2022).}
+Liu et al.\ (Meta) asked whether the transformer architecture was really the
+reason for this success. They started from ResNet-50 and changed it step by
+step: larger $7\times7$ depthwise kernels, fewer activation functions, and the
+long training with heavy augmentation used for transformers. The resulting
+pure CNN, \textbf{ConvNeXt}, matches or beats ViT of the same size. Much of
+the progress came from training recipes rather than from attention itself:
+simply retraining the \emph{original} ResNet-50 with a modern recipe raises
+its top-1 accuracy from 76.1\% to 80.9\%.
+
+\begin{notebox}
+  \textbf{CNN or transformer?} Both are in use today, and hybrids are common.
+  CNNs remain the default when data or computing power is limited, which is
+  the case in most factory applications. We meet transformers and attention
+  in a later topic.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Comparison}
+\label{sec:comparison}
+
+Table~\ref{tab:comparison} and Figure~\ref{fig:bubble} compare the networks of
+this section. All numbers are for the pretrained models in
+\texttt{torchvision}, the library we use for transfer learning below:
+top-1 accuracy on the ImageNet validation set with a single
+$224 \times 224$ input, and GFLOPs counted as multiply--adds per image. They
+differ slightly from the competition results quoted earlier.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{lcrrrl}
+    \toprule
+    Network           & Year & Params   & GFLOPs & Top-1  & Key idea                         \\
+    \midrule
+    LeNet-5           & 1998 & 0.06\,M  & ---    & ---    & conv + pool + dense              \\
+    AlexNet           & 2012 & 61.1\,M  & 0.71   & 56.5\% & ReLU, GPUs, augmentation         \\
+    VGG-16            & 2014 & 138.4\,M & 15.5   & 71.6\% & stacks of $3\times3$ kernels     \\
+    GoogLeNet         & 2014 & 6.6\,M   & 1.50   & 69.8\% & Inception, $1\times1$ bottleneck \\
+    ResNet-18         & 2015 & 11.7\,M  & 1.81   & 69.8\% & skip connections                 \\
+    ResNet-50         & 2015 & 25.6\,M  & 4.09   & 76.1\% & skip connections                 \\
+    ResNet-152        & 2015 & 60.2\,M  & 11.5   & 78.3\% & skip connections                 \\
+    SqueezeNet 1.1    & 2016 & 1.2\,M   & 0.35   & 58.2\% & fire modules                     \\
+    MobileNetV2       & 2018 & 3.5\,M   & 0.30   & 71.9\% & separable conv + skips           \\
+    MobileNetV3-Large & 2019 & 5.5\,M   & 0.22   & 74.0\% & automated search                 \\
+    EfficientNet-B0   & 2019 & 5.3\,M   & 0.39   & 77.7\% & compound scaling                 \\
+    EfficientNet-B7   & 2019 & 66.3\,M  & 37.7   & 84.1\% & compound scaling                 \\
+    ViT-B/16          & 2020 & 86.6\,M  & 17.6   & 81.1\% & transformer on patches           \\
+    ConvNeXt-Tiny     & 2022 & 28.6\,M  & 4.46   & 82.5\% & modernised ResNet                \\
+    \bottomrule
+  \end{tabular}
+  \caption{Famous image classifiers. Accuracy, parameters and GFLOPs are
+    those of the \texttt{IMAGENET1K\_V1} weights in \texttt{torchvision}.}
+  \label{tab:comparison}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        width=15cm, height=9.5cm,
+        xmode=log, xmin=0.1, xmax=80, ymin=50, ymax=88,
+        log ticks with fixed point,
+        xtick={0.1,0.3,1,3,10,30},
+        xlabel={computation per image (GFLOPs, log scale)},
+        ylabel={ImageNet top-1 accuracy (\%)},
+        grid=major, grid style={gray!20},
+        tick label style={font=\small}, label style={font=\small},
+        clip=false,
+      ]
+      % classic CNNs (2012–2015)
+      \bubble{0.714}{56.5}{12.5}{mainblue}{\hspace*{13pt}AlexNet}{west}
+      \bubble{15.47}{71.6}{18.8}{mainblue}{VGG-16}{center}
+      \bubble{1.498}{69.8}{4.1}{mainblue}{GoogLeNet\hspace*{7pt}}{east}
+      \bubble{1.814}{69.8}{5.5}{mainblue}{\hspace*{8pt}ResNet-18}{west}
+      \bubble{4.089}{76.1}{8.1}{mainblue}{\hspace*{10pt}ResNet-50}{west}
+      \bubble{11.51}{78.3}{12.4}{mainblue}{ResNet-152\hspace*{14pt}}{east}
+      % efficient CNNs (2016–2019)
+      \bubble{0.349}{58.2}{2.0}{green!60!black}{SqueezeNet\hspace*{3pt}}{east}
+      \bubble{0.301}{71.9}{3.0}{green!60!black}{\hspace*{5pt}MobileNetV2}{west}
+      \bubble{0.217}{74.0}{3.7}{green!60!black}{\hspace*{5pt}MobileNetV3-L}{west}
+      \bubble{0.386}{77.7}{3.7}{green!60!black}{\hspace*{5pt}EfficientNet-B0}{west}
+      \bubble{37.75}{84.1}{13.0}{green!60!black}{EfficientNet-B7\hspace*{15pt}}{east}
+      % 2020 and later
+      \bubble{17.56}{81.1}{14.9}{orange}{ViT-B/16\hspace*{16pt}}{east}
+      \bubble{4.456}{82.5}{8.6}{orange}{ConvNeXt-T\hspace*{10pt}}{east}
+
+      % legend (lower right)
+      \node[anchor=west, font=\scriptsize] at (axis cs:4,66) {%
+        \tikz\fill[mainblue, fill opacity=0.5] (0,0) circle (3pt); classic CNN (2012--15)};
+      \node[anchor=west, font=\scriptsize] at (axis cs:4,63.8) {%
+        \tikz\fill[green!60!black, fill opacity=0.5] (0,0) circle (3pt); efficient CNN (2016--19)};
+      \node[anchor=west, font=\scriptsize] at (axis cs:4,61.6) {%
+        \tikz\fill[orange, fill opacity=0.5] (0,0) circle (3pt); 2020 and later};
+      \draw[gray] (axis cs:9,56.6)  circle[radius=3.6pt];
+      \draw[gray] (axis cs:17,56.6) circle[radius=8pt];
+      \draw[gray] (axis cs:36,56.6) circle[radius=16pt];
+      \node[font=\scriptsize, gray] at (axis cs:9,52.2)  {5\,M};
+      \node[font=\scriptsize, gray] at (axis cs:17,52.2) {25\,M};
+      \node[font=\scriptsize, gray] at (axis cs:36,52.2) {100\,M};
+      \node[font=\scriptsize, gray, anchor=east] at (axis cs:7,56.6) {parameters:};
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Accuracy against computation; the area of each circle is
+    proportional to the number of parameters. Good models sit in the upper
+    left: high accuracy for little computation. Data from
+    Table~\ref{tab:comparison}.}
+  \label{fig:bubble}
+\end{figure}
+
+\begin{stepbox}{Exercise 7 \quad Pick a model for a smart camera}
+  A smart camera can afford at most 0.5 GFLOPs per image and has room for
+  at most 10 million parameters. Use Table~\ref{tab:comparison}.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item Which models fit both limits? \\
+          $\sol[12cm]{\text{SqueezeNet, MobileNetV2, MobileNetV3-L, EfficientNet-B0}}$
+    \item The most accurate of them is $\sol[4cm]{\text{EfficientNet-B0}}$
+          with $\sol[1.5cm]{77.7\%}$.
+    \item Compared with it, ResNet-50 needs about $\sol[1.2cm]{10}$ times more
+          computation and is $\sol[1.5cm]{1.6}$ percentage points
+          \emph{less} accurate.
+  \end{enumerate}
+\end{stepbox}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Transfer Learning}
@@ -441,7 +751,7 @@ model.fc = nn.Linear(512, 3)             # new head: 3 defect classes
 optimizer = torch.optim.Adam(model.fc.parameters(), lr=1e-3)
 \end{codebox}
 
-\begin{stepbox}{Exercise 6 \quad How much is trained?}
+\begin{stepbox}{Exercise 8 \quad How much is trained?}
   ResNet-18 has about 11.7 million parameters. Its final global average pooling
   produces 512 features.
   \begin{enumerate}[label=(\alph*), nosep]
@@ -468,6 +778,13 @@ optimizer = torch.optim.Adam(model.fc.parameters(), lr=1e-3)
         number of channels cheaply.
   \item ResNet: skip connections, $\text{output} = \relu(F(\bH) + \bH)$, keep
         gradients alive and make networks of 100+ layers trainable.
+  \item MobileNet: a depthwise separable convolution (per-channel $k\times k$,
+        then $1\times1$) needs about $1/C_{\text{out}} + 1/k^2$ of the cost of
+        a standard one. SqueezeNet and EfficientNet also reach good accuracy
+        with few parameters and little computation.
+  \item Vision transformers (2020) replace convolution with attention on image
+        patches; ConvNeXt (2022) shows a modernised CNN does as well. Compare
+        networks by top-1 accuracy, parameters and GFLOPs together.
   \item Transfer learning reuses an ImageNet feature extractor and retrains
         only a new head, so a few hundred images can be enough.
 \end{itemize}

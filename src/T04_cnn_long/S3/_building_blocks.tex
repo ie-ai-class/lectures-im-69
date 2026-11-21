@@ -167,7 +167,7 @@ not overlap and each feature map shrinks to half its height and width.
     \fill[mainblue!20] (10,-1) rectangle (11,-2);
     \fill[green!25]    (9,-2)  rectangle (10,-3);
     \fill[purple!20]   (10,-2) rectangle (11,-3);
-    \draw[thick] (9,-1) grid (11,-3);
+    \draw[thick, step=1] (9,-1) grid (11,-3);
     \node[layerlabel] at (10,-3.7) {output ($2\times2$)};
   \end{tikzpicture}
   \caption{Max pooling with a $2 \times 2$ window and stride $2$. Each
@@ -207,6 +207,13 @@ Some facts about pooling layers:
         layers, and it makes the receptive field grow much faster than
         stacking convolutions alone (Section 4.1).
 \end{itemize}
+
+\begin{notebox}
+  \textbf{Try it.} deeplizard's \emph{Max Pooling Demo}
+  (\url{https://deeplizard.com/resource/pavq7noze3}) max-pools a real image
+  step by step. Change the window size and stride, watch the image shrink,
+  and hover over an output pixel to see the window it came from.
+\end{notebox}
 
 % ──────────────────────────────────────────────────────────────────────────────
 \subsection{Pooling Gives Invariance to Small Shifts}
@@ -298,8 +305,8 @@ A CNN for classification has two parts:
     \draw[->, thick] (10.75,0) -- (11.6,0);
     \draw[->, thick] (12.05,0) -- (12.9,0);
 
-    \draw[brace] (0,2.1) -- node[above=5pt, font=\small] {feature extractor} (9.6,2.1);
-    \draw[brace] (10.3,2.1) -- node[above=5pt, font=\small] {classifier head} (13.4,2.1);
+    \draw[brace] (0,2.5) -- node[above=5pt, font=\small] {feature extractor} (9.6,2.5);
+    \draw[brace] (10.3,2.5) -- node[above=5pt, font=\small] {classifier head} (13.4,2.5);
   \end{tikzpicture}
   \caption{A small CNN for MNIST. Each conv layer is followed by ReLU (not
     drawn). The feature maps get smaller and deeper; the final maps are
@@ -326,6 +333,15 @@ model = nn.Sequential(
 
 As in Section 3.4, the model outputs logits; \texttt{nn.CrossEntropyLoss}
 applies softmax and cross-entropy together.
+
+\begin{notebox}
+  \textbf{Try it.} Adam Harley's \emph{3D CNN visualisation}
+  (\url{https://adamharley.com/nn_vis/cnn/3d.html}) runs a network much like
+  the one in Figure~\ref{fig:cnn}: two convolution and two downsampling layers,
+  then two fully connected layers. Draw a digit and watch it pass through every
+  layer; point at a unit to see the inputs and weights that produce its
+  value.
+\end{notebox}
 
 \begin{stepbox}{Exercise 4 \quad Trace the network}
   Fill in the output shape (for one image) and the number of parameters of

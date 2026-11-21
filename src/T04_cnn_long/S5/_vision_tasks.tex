@@ -187,7 +187,7 @@ true box exactly. The standard measure of overlap is the
 \begin{figure}[H]
   \centering
   \begin{tikzpicture}[x=0.7cm, y=0.7cm]
-    \draw[gray!30] (0,0) grid (7,6);
+    \draw[gray!30, step=1] (0,0) grid (7,6);
     \foreach \x in {0,...,7} \node[below, font=\scriptsize, gray] at (\x,0) {\x};
     \foreach \y in {0,...,6} \node[left, font=\scriptsize, gray] at (0,\y) {\y};
     \fill[purple!30] (2,1) rectangle (4,4);
@@ -291,7 +291,7 @@ for detecting it. Every cell predicts:
   \begin{tikzpicture}[x=0.75cm, y=0.75cm]
     \draw[frame] (0,0) rectangle (7,7);
     \fill[mainblue!15] (2,3) rectangle (3,4);
-    \draw[gray!60] (0,0) grid (7,7);
+    \draw[gray!60, step=1] (0,0) grid (7,7);
     \filldraw[fill=gray!45, draw=gray!80!black] (2.6,3.4) circle (1.1);
     \filldraw[fill=gray!8, draw=gray!80!black] (2.6,3.4) circle (0.45);
     \fill[mainblue!45, opacity=0.55] (2,3) rectangle (3,4);
