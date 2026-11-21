@@ -1,0 +1,874 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
+
+% ── Local macros ──────────────────────────────────────────────────────────────
+\providecommand{\bH}{\mathbf{H}}
+
+% ── Local TikZ styles ─────────────────────────────────────────────────────────
+\usetikzlibrary{decorations.pathreplacing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\tikzset{
+  layerlabel/.style={font=\small\itshape, gray},
+  opbox/.style={draw=orange!70!black, fill=notebg, thick, rounded corners=4pt,
+      minimum height=0.8cm, minimum width=1.7cm, font=\small, align=center},
+  convbox/.style={draw=mainblue, fill=boxbg, thick, rounded corners=3pt,
+      minimum height=0.75cm, minimum width=1.6cm, font=\small, align=center},
+  brace/.style={decorate, decoration={brace, amplitude=4pt}, thick, gray},
+  frame/.style={draw=gray!70, fill=gray!8, thick},
+  bbox/.style={line width=1.3pt},
+}
+
+% \cuboid[<label y>]{<x>}{<depth: channels>}{<height: spatial>}{<color>}{<label>}
+%   pseudo-3D block for a (C, H, W) tensor, centred vertically on y = 0
+\newcommand{\cuboid}[6][-1.75]{%
+  \pgfmathsetmacro{\off}{#4*0.3}
+  \filldraw[fill=#5!20, draw=#5!80!black] (#2,-#4/2) rectangle ++(#3,#4);
+  \filldraw[fill=#5!35, draw=#5!80!black]
+  (#2,#4/2) -- ++(\off,\off) -- ++(#3,0) -- ++(-\off,-\off) -- cycle;
+  \filldraw[fill=#5!50, draw=#5!80!black]
+  (#2+#3,-#4/2) -- ++(\off,\off) -- ++(0,#4) -- ++(-\off,-\off) -- cycle;
+  \node[below, font=\scriptsize, align=center] at (#2+#3/2,#1) {#6};
+}
+
+% \chstack{<x>}{<y>}{<size>}{<colour list, back to front>}
+%   a stack of square feature maps / filter slices, offset diagonally
+\newcommand{\chstack}[4]{%
+  \foreach \col [count=\i from 0] in {#4} {
+      \filldraw[fill=\col!25, draw=\col!80!black]
+      (#1+0.15*\i, #2-0.15*\i) rectangle ++(#3, #3);
+    }%
+}
+
+% \bubble{<GFLOPs>}{<top-1>}{<radius pt>}{<colour>}{<label>}{<label anchor>}
+%   one model in the bubble chart; radius = 1.6pt * sqrt(params in millions),
+%   so the circle's area is proportional to the number of parameters
+\newcommand{\bubble}[6]{%
+  \fill[#4, fill opacity=0.35] (axis cs:#1,#2) circle[radius=#3pt];
+  \draw[#4!80!black, thin] (axis cs:#1,#2) circle[radius=#3pt];
+  \node[font=\scriptsize, anchor=#6, inner sep=2pt] at (axis cs:#1,#2) {#5};
+}
+
+% \scene{<nut1 style>}{<nut2 style>}{<bolt style>} — toy image: two nuts, one bolt
+\newcommand{\scene}[3]{%
+  \draw[frame] (0,0) rectangle (3.2,2.6);
+  \filldraw[#1] (0.9,1.0) circle (0.45);
+  \filldraw[#2] (2.3,1.85) circle (0.4);
+  \filldraw[#3] (1.7,0.35) rectangle (2.9,0.75);
+}
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Section 4.2: CNN Architectures and Vision Tasks}} \\[0.3em]
+  {\large\itshape From LeNet-5 to ConvNeXt, and Beyond Classification} \\[0.5em]
+  {\large AI-IM Class --- Lecture Notes}%
+  \ifstudentmode
+    \quad {\normalsize\color{gray}[Student Copy]}%
+  \fi
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+With convolution, pooling and the classifier head (Section 4.1) we can build
+any CNN. The question is \emph{which} CNN to build: how many layers, what
+kernel sizes, how many channels. The answers came from a short series of
+famous architectures, each introducing one idea that is still used today.
+In this section we
+\begin{itemize}[nosep]
+  \item trace LeNet-5, the first successful CNN, layer by layer,
+  \item follow the ImageNet competition and the key idea of each famous
+        architecture, from AlexNet to ConvNeXt,
+  \item compare them by accuracy, size and computing cost, and reuse a
+        pretrained network for our own problem (\emph{transfer learning}),
+        and
+  \item look beyond classification: object detection, segmentation and OCR.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{LeNet-5 (1998)}
+
+\textbf{LeNet-5}, by Yann LeCun and colleagues, read handwritten digits on
+bank cheques. It already has the structure of Section 4.1: two conv--pool
+blocks followed by fully connected layers.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, scale=0.95, every node/.style={transform shape}]
+    \cuboid{0}{0.1}{3.2}{gray}{input\\$(1,32,32)$}
+    \cuboid{1.9}{0.4}{2.8}{mainblue}{C1\\$(6,28,28)$}
+    \cuboid{3.9}{0.4}{1.4}{mainblue}{S2\\$(6,14,14)$}
+    \cuboid{5.6}{0.9}{1.0}{orange}{C3\\$(16,10,10)$}
+    \cuboid{7.9}{0.9}{0.5}{orange}{S4\\$(16,5,5)$}
+    \draw[->, thick] (1.1,0) -- (1.8,0);
+    \draw[->, thick] (3.1,0) -- (3.8,0);
+    \draw[->, thick] (4.8,0) -- (5.5,0);
+    \draw[->, thick] (6.9,0) -- (7.8,0);
+
+    \filldraw[fill=green!20, draw=green!50!black] (10.0,-1.2) rectangle ++(0.25,2.4);
+    \node[below, font=\scriptsize, align=center] at (10.12,-1.75) {C5\\$120$};
+    \filldraw[fill=green!20, draw=green!50!black] (11.3,-0.85) rectangle ++(0.25,1.7);
+    \node[below, font=\scriptsize, align=center] at (11.42,-1.75) {F6\\$84$};
+    \filldraw[fill=green!35, draw=green!50!black] (12.6,-0.4) rectangle ++(0.25,0.8);
+    \node[below, font=\scriptsize, align=center] at (12.72,-1.75) {output\\$10$};
+    \draw[->, thick] (9.1,0) -- (9.9,0);
+    \draw[->, thick] (10.35,0) -- (11.2,0);
+    \draw[->, thick] (11.65,0) -- (12.5,0);
+  \end{tikzpicture}
+  \caption{LeNet-5. C = convolution ($5\times5$, valid), S = subsampling
+    ($2\times2$ average pooling), F = fully connected.}
+  \label{fig:lenet}
+\end{figure}
+
+The input is a $32 \times 32$ grayscale image (MNIST digits padded from
+$28 \times 28$). All convolutions use $5 \times 5$ kernels with stride $1$ and
+no padding; all pooling layers are $2 \times 2$ with stride $2$. We use the
+common modern version: ReLU activations, average pooling, every C3 filter
+connected to all 6 input channels, and a linear output layer.
+Table~\ref{tab:lenet} traces the shapes and parameters with the formulas of
+Section 4.1.
+
+\begin{table}[H]
+  \centering
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{llll}
+    \toprule
+    Layer                     & Operation              & Output shape    & Parameters                         \\
+    \midrule
+    Input                     &                        & $(1, 32, 32)$   & ---                                \\
+    C1                        & 6 filters $5\times5$   & $(6, 28, 28)$   & $(1\cdot25+1)\cdot6 = 156$         \\
+    S2                        & avg pool $2\times2$    & $(6, 14, 14)$   & $0$                                \\
+    C3                        & 16 filters $5\times5$  & $(16, 10, 10)$  & $(6\cdot25+1)\cdot16 = 2\,416$     \\
+    S4                        & avg pool $2\times2$    & $(16, 5, 5)$    & $0$                                \\
+    C5                        & 120 filters $5\times5$ & $(120, 1, 1)$   & $(16\cdot25+1)\cdot120 = 48\,120$  \\
+    F6                        & linear                 & $(84)$          & $(120+1)\cdot84 = 10\,164$         \\
+    Output                    & linear                 & $(10)$          & $(84+1)\cdot10 = 850$              \\
+    \midrule
+    \multicolumn{3}{l}{Total} & $61\,706$                                                                   \\
+    \bottomrule
+  \end{tabular}
+  \caption{LeNet-5 layer by layer.}
+  \label{tab:lenet}
+\end{table}
+
+C5 is called a convolution although it behaves like a fully connected layer:
+its $5\times5$ kernel exactly covers the $5\times5$ input, so there is only
+one position and each filter sees every input value.
+
+\begin{notebox}
+  \textbf{The original LeNet-5} used scaled $\tanh$ activations, pooling
+  layers with one trainable weight and bias per channel, and a hand-designed
+  table that connected each C3 filter to only some of the S2 channels
+  (1\,516 parameters instead of 2\,416), to save computation in 1998.
+  Its total is still about 60 thousand parameters.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The ImageNet Challenge}
+
+LeNet-5 worked on small grayscale digits. Natural photos are much harder:
+thousands of object types, varying lighting, viewpoint and background.
+The \textbf{ImageNet Large Scale Visual Recognition Challenge (ILSVRC)} ran
+from 2010 to 2017. Its classification task had about 1.2 million training
+images in 1\,000 classes. Performance is measured by the \textbf{top-5 error}:
+a prediction counts as correct if the true class is among the model's five
+most probable classes. The stricter \textbf{top-1 accuracy} counts only the
+single most probable class. The jump in 2012 is the moment deep learning took
+over computer vision; by 2015 CNNs beat the human estimate. Each of the
+architectures below won (or nearly won) one of these years.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=1.45cm, y=0.13cm]
+    \draw[->, gray] (0.3,0) -- (8.7,0);
+    \draw[->, gray] (0.3,0) -- (0.3,32) node[above, font=\small] {top-5 error (\%)};
+    \foreach \t in {0,10,20,30}
+    \node[left, font=\scriptsize] at (0.3,\t) {\t};
+    \draw[red!70!black, dashed, thick] (0.4,5.1) -- (8.6,5.1)
+    node[right, font=\scriptsize, align=left] {human\\$\approx 5.1$};
+    \foreach \i/\yr/\e/\name/\col in {
+    1/2010/28.2/{}/gray,
+    2/2011/25.8/{}/gray,
+    3/2012/16.4/AlexNet/mainblue,
+    4/2013/11.7/ZFNet/mainblue,
+    5/2014/6.7/GoogLeNet/mainblue,
+    6/2015/3.6/ResNet/mainblue,
+    7/2016/3.0/{}/mainblue,
+    8/2017/2.3/SENet/mainblue} {
+    \filldraw[fill=\col!40, draw=\col!80!black] (\i-0.3,0) rectangle (\i+0.3,\e);
+    \node[above, font=\scriptsize, fill=white, inner sep=1pt] at (\i,\e+0.4) {\e};
+    \node[below, font=\scriptsize] at (\i,0) {\yr};
+    \node[below, font=\scriptsize\itshape, gray] at (\i,-2.8) {\name};
+    }
+  \end{tikzpicture}
+  \caption{Winning top-5 error in the ILSVRC classification task. Grey: methods
+    based on hand-designed features; blue: CNNs. The 2016 winner combined
+    existing networks rather than introducing a new one. The human estimate is
+    Andrej Karpathy's result on a test sample.}
+  \label{fig:ilsvrc}
+\end{figure}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{AlexNet (2012): Scale It Up}
+
+\textbf{AlexNet} (Krizhevsky, Sutskever and Hinton) is LeNet made bigger:
+5 convolutional and 3 fully connected layers, about 60 million parameters,
+trained on $224 \times 224$ colour images. Its architecture was not new; what
+made it work were practical choices that are still standard today:
+\textbf{ReLU} instead of $\tanh$, which trained several times faster;
+\textbf{GPUs} (two gaming graphics cards, for about a week);
+\textbf{data augmentation} with random crops and flips of the training images;
+and \textbf{dropout} in the fully connected layers against overfitting. The
+2013 winner, \textbf{ZFNet} (Zeiler and Fergus), kept AlexNet's design but
+used a smaller $7 \times 7$ first-layer kernel, a change they found by
+\emph{visualising} what each layer had learned.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{VGG (2014): Only Small Kernels}
+
+\textbf{VGG} (Simonyan and Zisserman, Oxford) asked how far a very simple
+design can go. It uses only $3 \times 3$ convolutions with stride $1$ and same
+padding, and $2 \times 2$ max pooling, repeated in blocks until the network has
+16 or 19 layers; each block halves the feature maps and doubles the channels
+($64 \to 128 \to 256 \to 512$). Two stacked $3 \times 3$ layers have the same
+receptive field as one $5 \times 5$ layer, but need $18C^2$ instead of $25C^2$
+weights and add one more ReLU. VGG-16 reached 7.3\% top-5 error, but it has
+about 138 million parameters, most of them in its three fully connected
+layers. Its uniform design made it popular as a starting point for other
+tasks.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{GoogLeNet / Inception (2014): Go Wide, Cheaply}
+
+\textbf{GoogLeNet} (Szegedy et al., Google) won 2014 with 6.7\% top-5 error
+using about 7 million parameters, roughly 20 times fewer than VGG. Its
+\textbf{Inception module} applies several kernel sizes in parallel and
+concatenates the results along the channel dimension. What makes this
+affordable is the \textbf{$1 \times 1$ convolution}: it looks at a single pixel
+but across \emph{all} its channels, which is a small fully connected layer
+applied at each pixel, so it changes the number of channels without touching
+the height and width. Placing a $1\times1$ layer with few filters before each
+$3\times3$ and $5\times5$ convolution (a \emph{bottleneck}) cuts their cost by
+about an order of magnitude.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, x=3.2cm, y=1.4cm]
+    \node[opbox, minimum width=3cm] (in) at (1.5, 3.4) {previous layer};
+    \node[convbox] (a1) at (0, 1.5) {$1\times1$};
+    \node[convbox] (b1) at (1, 2) {$1\times1$};
+    \node[convbox] (b2) at (1, 1) {$3\times3$};
+    \node[convbox] (c1) at (2, 2) {$1\times1$};
+    \node[convbox] (c2) at (2, 1) {$5\times5$};
+    \node[opbox, minimum width=1.6cm] (d1) at (3, 2) {$3\times3$\\[-2pt]\scriptsize max pool};
+    \node[convbox] (d2) at (3, 1) {$1\times1$};
+    \node[opbox, minimum width=3cm] (out) at (1.5, -0.5) {concatenate channels};
+    \draw[->] (in) -- (a1); \draw[->] (in) -- (b1);
+    \draw[->] (in) -- (c1); \draw[->] (in) -- (d1);
+    \draw[->] (b1) -- (b2); \draw[->] (c1) -- (c2); \draw[->] (d1) -- (d2);
+    \draw[->] (a1) -- (out); \draw[->] (b2) -- (out);
+    \draw[->] (c2) -- (out); \draw[->] (d2) -- (out);
+  \end{tikzpicture}
+  \caption{An Inception module. Four branches see the same input with
+    different receptive fields. In the second and third branches a
+    $1 \times 1$ convolution first shrinks the number of channels, so the
+    expensive $3\times3$ and $5\times5$ convolutions become cheap.}
+  \label{fig:inception}
+\end{figure}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{ResNet (2015): Skip Connections}
+
+He et al.\ (Microsoft Research) found that a plain 56-layer network had a
+\emph{higher training error} than a 20-layer one: deeper networks were harder
+to \emph{optimise}. Their fix was the \textbf{residual block}, whose layers
+compute a correction $F(\bH)$ that is \emph{added} to the block's input
+through a \textbf{skip connection}: $\text{output} = \relu\bigl(F(\bH) +
+\bH\bigr)$. If the best thing a block can do is nothing, it only needs
+$F = 0$, which is easy to learn. The skip connection also keeps the gradient
+alive: a plain layer $y = f(x)$ multiplies the gradient by $f'$, and a product
+of many small factors vanishes (Section 3.4), while the residual version
+$y = x + f(x)$ multiplies it by $1 + f'$, which does not shrink. With skip
+connections ResNet trained networks with 152 layers and won 2015 with 3.6\%
+top-5 error, better than the human estimate. Skip connections are now
+everywhere in deep learning, including the transformers behind large language
+models.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=0.8cm]
+    \node (in) {$\bH$};
+    \node[convbox, right=of in] (c1) {$3\times3$ conv};
+    \node[opbox, right=0.6cm of c1, minimum width=1.2cm] (r1) {ReLU};
+    \node[convbox, right=0.6cm of r1] (c2) {$3\times3$ conv};
+    \node[circle, draw, thick, right=1.3cm of c2, inner sep=1pt] (plus) {$+$};
+    \node[opbox, right=0.6cm of plus, minimum width=1.2cm] (r2) {ReLU};
+    \node[right=0.6cm of r2] (out) {output};
+    \draw[->, thick] (in) -- (c1);
+    \draw[->, thick] (c1) -- (r1);
+    \draw[->, thick] (r1) -- (c2);
+    \draw[->, thick] (c2) -- node[below, font=\small] {$F(\bH)$} (plus);
+    \draw[->, thick] (plus) -- (r2);
+    \draw[->, thick] (r2) -- (out);
+    \draw[->, thick, red!70!black] ($(in.east)+(0.2,0)$) -- ++(0,-1.1)
+    -| node[pos=0.25, below, font=\small] {identity (skip connection)} (plus);
+    \draw[brace] ($(c1.north west)+(0,0.15)$) --
+    node[above=5pt, font=\small] {$F$: the residual branch}
+    ($(c2.north east)+(0,0.15)$);
+  \end{tikzpicture}
+  \caption{A residual block. The input skips past two convolutions and is
+    added to their output. (Real ResNets also put a normalisation layer after
+    each convolution, which we meet in a later topic.)}
+  \label{fig:resblock}
+\end{figure}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Efficient Networks (2016--2019): Small and Fast}
+
+After ResNet, a new question became just as important as accuracy: can the
+network run on a phone, a drone or a smart camera on a production line? Two
+numbers measure the cost of a network: the number of \textbf{parameters},
+which sets the memory needed to store the model, and the number of
+\textbf{multiply--adds} per image, which sets the running time and energy and
+is usually reported in \textbf{GFLOPs} (billions of operations).
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{SqueezeNet (2016): AlexNet Accuracy in 5 MB}
+
+\textbf{SqueezeNet} (Iandola et al.) takes the $1\times1$ bottleneck of
+GoogLeNet to the extreme. Its \emph{fire module} first \emph{squeezes} the
+channels with a few $1\times1$ filters, then \emph{expands} them again with a
+mix of $1\times1$ and $3\times3$ filters, and the network has no large fully
+connected layers. It matches AlexNet's accuracy with about 1.2 million
+parameters, roughly 50 times fewer, so the whole model fits in less than
+5\,MB.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{MobileNet (2017): Depthwise Separable Convolutions}
+
+A standard convolution filters space and mixes all channels at once.
+\textbf{MobileNet} (Howard et al., Google) splits these two jobs into a
+\textbf{depthwise} convolution (one $k \times k$ filter per input channel,
+applied to that channel only) followed by a \textbf{pointwise} $1 \times 1$
+convolution that mixes the channels. This \textbf{depthwise separable
+convolution} costs $1/C_{\text{out}} + 1/k^2$ of a standard one: for
+$3 \times 3$ kernels and many channels, about 8 to 9 times fewer weights and
+multiplications, for a small loss in accuracy. \textbf{MobileNetV2} (2018)
+adds ResNet's skip connections, and \textbf{MobileNetV3} (2019) reaches 74.0\%
+top-1 accuracy with almost 20 times less computation than ResNet-50.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, font=\small]
+    % ── (a) standard convolution ─────────────────────────────────────────────
+    % labels hang from y = -0.8, below the lowest drawing (y = -0.5)
+    \tikzset{steplabel/.style={layerlabel, anchor=north, align=center}}
+    \node[anchor=west, font=\small\bfseries] at (-0.2, 2.2) {(a) Standard convolution};
+    \chstack{0}{0}{1.4}{orange, mainblue, green!60!black}
+    \node[steplabel] at (0.85,-0.8) {input\\$C_{\text{in}} = 3$};
+    \draw[->, thick] (2.0,0.35) -- (3.3,0.35);
+    \chstack{3.6}{0.2}{0.6}{orange, mainblue, green!60!black}
+    \node[font=\small] at (5.0,0.35) {$\times\,4$};
+    \node[steplabel] at (4.25,-0.8) {4 filters, each\\$k \times k \times C_{\text{in}}$};
+    \draw[->, thick] (5.5,0.35) -- (6.8,0.35);
+    \chstack{7.1}{0}{1.4}{gray, gray, gray, gray}
+    \node[steplabel] at (8.0,-0.8) {output\\$C_{\text{out}} = 4$};
+    \node[anchor=west, align=left] at (10.0,0.35) {weights:\\$k^2\, C_{\text{in}}\, C_{\text{out}}$};
+
+    % ── (b) depthwise separable convolution ──────────────────────────────────
+    \begin{scope}[yshift=-4.8cm]
+      \node[anchor=west, font=\small\bfseries] at (-0.2, 2.2) {(b) Depthwise separable convolution};
+      \chstack{0}{0}{1.4}{orange, mainblue, green!60!black}
+      \node[steplabel] at (0.85,-0.8) {input\\$C_{\text{in}} = 3$};
+      \draw[->, thick] (2.0,0.35) -- (3.0,0.35);
+      \filldraw[fill=orange!25, draw=orange!80!black] (3.3,1.0) rectangle ++(0.5,0.5);
+      \filldraw[fill=mainblue!25, draw=mainblue!80!black] (3.3,0.25) rectangle ++(0.5,0.5);
+      \filldraw[fill=green!60!black!25, draw=green!60!black!80!black] (3.3,-0.5) rectangle ++(0.5,0.5);
+      \node[steplabel] at (3.55,-0.8) {depthwise:\\one $k\times k$\\per channel};
+      \draw[->, thick] (4.1,0.35) -- (5.1,0.35);
+      \chstack{5.4}{0}{1.4}{orange, mainblue, green!60!black}
+      \node[steplabel] at (6.25,-0.8) {still\\$C_{\text{in}}$ maps};
+      \draw[->, thick] (7.4,0.35) -- (8.4,0.35);
+      \chstack{8.7}{0.3}{0.3}{orange, mainblue, green!60!black}
+      \node[font=\small] at (9.75,0.35) {$\times\,4$};
+      \node[steplabel] at (9.1,-0.8) {pointwise:\\4 filters, each\\$1\times1\times C_{\text{in}}$};
+      \draw[->, thick] (10.2,0.35) -- (11.2,0.35);
+      \chstack{11.5}{0}{1.4}{gray, gray, gray, gray}
+      \node[steplabel] at (12.4,-0.8) {output\\$C_{\text{out}} = 4$};
+      \node[anchor=north] at (6.7,-2.5)
+      {weights: $\underbrace{k^2\, C_{\text{in}}}_{\text{depthwise}}
+          + \underbrace{C_{\text{in}}\, C_{\text{out}}}_{\text{pointwise}}$};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{(a) Each standard filter covers $k \times k$ pixels in all input
+    channels at once. (b) MobileNet first filters each channel separately with
+    its own $k \times k$ filter (the colours stay separate), then mixes the
+    channels with $1 \times 1$ filters.}
+  \label{fig:depthwise}
+\end{figure}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{EfficientNet (2019): Scale Everything Together}
+
+Given more computing power, should a network grow deeper (more layers), wider
+(more channels), or take larger input images? \textbf{EfficientNet} (Tan and
+Le, Google) grows all three together by fixed factors, which they call
+\textbf{compound scaling}. The smallest model, EfficientNet-B0, is built from
+MobileNet-style blocks; B1 to B7 are scaled-up copies of it. EfficientNet-B0
+beats ResNet-50 with one fifth of the parameters and one tenth of the
+computation, and B7 reaches 84.1\%.
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Squeeze-and-Excitation (SENet, 2017)}
+
+The last ILSVRC winner (Hu et al., 2.3\% top-5 error) is not a new
+architecture but an add-on block for ResNet or Inception that lets the network
+weight its channels for each image. It \emph{squeezes} every channel to one
+number with global average pooling, passes this vector through a tiny MLP
+ending in a sigmoid, and multiplies each channel by the resulting weight
+between 0 and 1, so a ``fur'' channel can be turned up for a dog and down for
+a car. MobileNetV3 and EfficientNet use such blocks throughout, and this
+input-dependent reweighting is an early form of the \emph{attention} used by
+transformers.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{After 2020: Transformers and Modern CNNs}
+
+\paragraph{Vision Transformer (ViT, 2020).}
+Dosovitskiy et al.\ (Google) removed convolution altogether. A ViT cuts the
+image into patches of $16 \times 16$ pixels, flattens each patch into a
+vector and treats the patches like the words of a sentence. A
+\textbf{transformer}, the same architecture as in large language models,
+processes this sequence; its \textbf{attention} layers let every patch look at
+every other patch directly. The price is that a ViT has no built-in idea that
+nearby pixels belong together: it must learn this from data. Trained on
+ImageNet alone it is no better than a good CNN; pretrained on hundreds of
+millions of images it gives the best results.
+
+\paragraph{ConvNeXt (2022).}
+Liu et al.\ (Meta) started from ResNet-50 and modernised it step by step:
+larger $7\times7$ depthwise kernels, fewer activation functions, and the long
+training with heavy augmentation used for transformers. The resulting pure
+CNN, \textbf{ConvNeXt}, matches or beats ViT of the same size. Much of the
+progress came from training recipes rather than from attention itself:
+simply retraining the \emph{original} ResNet-50 with a modern recipe raises
+its top-1 accuracy from 76.1\% to 80.9\%.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Comparison}
+\label{sec:comparison}
+
+Table~\ref{tab:comparison} and Figure~\ref{fig:bubble} compare the networks of
+this section. All numbers are for the pretrained models in
+\texttt{torchvision}, the library we use for transfer learning below:
+top-1 accuracy on the ImageNet validation set with a single
+$224 \times 224$ input, and GFLOPs counted as multiply--adds per image. They
+differ slightly from the competition results quoted earlier.
+
+\begin{table}[H]
+  \centering
+  \small
+  \renewcommand{\arraystretch}{1.3}
+  \begin{tabular}{lcrrrl}
+    \toprule
+    Network           & Year & Params   & GFLOPs & Top-1  & Key idea                         \\
+    \midrule
+    LeNet-5           & 1998 & 0.06\,M  & ---    & ---    & conv + pool + dense              \\
+    AlexNet           & 2012 & 61.1\,M  & 0.71   & 56.5\% & ReLU, GPUs, augmentation         \\
+    VGG-16            & 2014 & 138.4\,M & 15.5   & 71.6\% & stacks of $3\times3$ kernels     \\
+    GoogLeNet         & 2014 & 6.6\,M   & 1.50   & 69.8\% & Inception, $1\times1$ bottleneck \\
+    ResNet-18         & 2015 & 11.7\,M  & 1.81   & 69.8\% & skip connections                 \\
+    ResNet-50         & 2015 & 25.6\,M  & 4.09   & 76.1\% & skip connections                 \\
+    ResNet-152        & 2015 & 60.2\,M  & 11.5   & 78.3\% & skip connections                 \\
+    SqueezeNet 1.1    & 2016 & 1.2\,M   & 0.35   & 58.2\% & fire modules                     \\
+    MobileNetV2       & 2018 & 3.5\,M   & 0.30   & 71.9\% & separable conv + skips           \\
+    MobileNetV3-Large & 2019 & 5.5\,M   & 0.22   & 74.0\% & automated search                 \\
+    EfficientNet-B0   & 2019 & 5.3\,M   & 0.39   & 77.7\% & compound scaling                 \\
+    EfficientNet-B7   & 2019 & 66.3\,M  & 37.7   & 84.1\% & compound scaling                 \\
+    ViT-B/16          & 2020 & 86.6\,M  & 17.6   & 81.1\% & transformer on patches           \\
+    ConvNeXt-Tiny     & 2022 & 28.6\,M  & 4.46   & 82.5\% & modernised ResNet                \\
+    \bottomrule
+  \end{tabular}
+  \caption{Famous image classifiers. Accuracy, parameters and GFLOPs are
+    those of the \texttt{IMAGENET1K\_V1} weights in \texttt{torchvision}.}
+  \label{tab:comparison}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        width=15cm, height=9.5cm,
+        xmode=log, xmin=0.1, xmax=80, ymin=50, ymax=88,
+        log ticks with fixed point,
+        xtick={0.1,0.3,1,3,10,30},
+        xlabel={computation per image (GFLOPs, log scale)},
+        ylabel={ImageNet top-1 accuracy (\%)},
+        grid=major, grid style={gray!20},
+        tick label style={font=\small}, label style={font=\small},
+        clip=false,
+      ]
+      % classic CNNs (2012–2015)
+      \bubble{0.714}{56.5}{12.5}{mainblue}{\hspace*{13pt}AlexNet}{west}
+      \bubble{15.47}{71.6}{18.8}{mainblue}{VGG-16}{center}
+      \bubble{1.498}{69.8}{4.1}{mainblue}{GoogLeNet\hspace*{7pt}}{east}
+      \bubble{1.814}{69.8}{5.5}{mainblue}{\hspace*{8pt}ResNet-18}{west}
+      \bubble{4.089}{76.1}{8.1}{mainblue}{\hspace*{10pt}ResNet-50}{west}
+      \bubble{11.51}{78.3}{12.4}{mainblue}{ResNet-152\hspace*{14pt}}{east}
+      % efficient CNNs (2016–2019)
+      \bubble{0.349}{58.2}{2.0}{green!60!black}{SqueezeNet\hspace*{3pt}}{east}
+      \bubble{0.301}{71.9}{3.0}{green!60!black}{\hspace*{5pt}MobileNetV2}{west}
+      \bubble{0.217}{74.0}{3.7}{green!60!black}{\hspace*{5pt}MobileNetV3-L}{west}
+      \bubble{0.386}{77.7}{3.7}{green!60!black}{\hspace*{5pt}EfficientNet-B0}{west}
+      \bubble{37.75}{84.1}{13.0}{green!60!black}{EfficientNet-B7\hspace*{15pt}}{east}
+      % 2020 and later
+      \bubble{17.56}{81.1}{14.9}{orange}{ViT-B/16\hspace*{16pt}}{east}
+      \bubble{4.456}{82.5}{8.6}{orange}{ConvNeXt-T\hspace*{10pt}}{east}
+
+      % legend (lower right)
+      \node[anchor=west, font=\scriptsize] at (axis cs:4,66) {%
+        \tikz\fill[mainblue, fill opacity=0.5] (0,0) circle (3pt); classic CNN (2012--15)};
+      \node[anchor=west, font=\scriptsize] at (axis cs:4,63.8) {%
+        \tikz\fill[green!60!black, fill opacity=0.5] (0,0) circle (3pt); efficient CNN (2016--19)};
+      \node[anchor=west, font=\scriptsize] at (axis cs:4,61.6) {%
+        \tikz\fill[orange, fill opacity=0.5] (0,0) circle (3pt); 2020 and later};
+      \draw[gray] (axis cs:9,56.6)  circle[radius=3.6pt];
+      \draw[gray] (axis cs:17,56.6) circle[radius=8pt];
+      \draw[gray] (axis cs:36,56.6) circle[radius=16pt];
+      \node[font=\scriptsize, gray] at (axis cs:9,52.2)  {5\,M};
+      \node[font=\scriptsize, gray] at (axis cs:17,52.2) {25\,M};
+      \node[font=\scriptsize, gray] at (axis cs:36,52.2) {100\,M};
+      \node[font=\scriptsize, gray, anchor=east] at (axis cs:7,56.6) {parameters:};
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Accuracy against computation; the area of each circle is
+    proportional to the number of parameters. Good models sit in the upper
+    left: high accuracy for little computation. Data from
+    Table~\ref{tab:comparison}.}
+  \label{fig:bubble}
+\end{figure}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Transfer Learning}
+\label{sec:transfer}
+
+Training a ResNet from scratch needs a million labelled images and days of
+GPU time, but a factory that wants to classify, say, three kinds of surface
+defect may have only a few hundred photos. \textbf{Transfer learning} reuses a
+network that was already trained on ImageNet. Its feature extractor has
+learned general features (edges, textures, shapes) that are useful for almost
+any image; only the classifier head is specific to the 1\,000 ImageNet
+classes. So we load the pretrained network, replace its final linear layer
+with a new one that has one output per \emph{our} class, and train on our
+data: either only the new layer (\emph{feature extraction}, with the rest
+frozen), or the whole network with a small learning rate
+(\emph{fine-tuning}).
+
+\begin{codebox}
+import torchvision
+
+model = torchvision.models.resnet18(weights="IMAGENET1K_V1")
+for p in model.parameters():
+    p.requires_grad = False              # freeze the feature extractor
+
+model.fc = nn.Linear(512, 3)             # new head: 3 defect classes
+optimizer = torch.optim.Adam(model.fc.parameters(), lr=1e-3)
+\end{codebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Beyond Classification: A Family of Vision Tasks}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[scale=0.95]
+    % (a) classification
+    \begin{scope}
+      \draw[frame] (0,0) rectangle (3.2,2.6);
+      \filldraw[fill=gray!45, draw=gray!80!black] (1.6,1.3) circle (0.7);
+      \filldraw[fill=gray!8, draw=gray!80!black] (1.6,1.3) circle (0.3);
+      \node[font=\small] at (1.6,-0.35) {label: \texttt{nut}};
+      \node[font=\small\bfseries] at (1.6,-0.95) {(a) classification};
+    \end{scope}
+    % (b) detection
+    \begin{scope}[xshift=3.7cm]
+      \scene{fill=gray!45, draw=gray!80!black}{fill=gray!45, draw=gray!80!black}
+      {fill=gray!45, draw=gray!80!black}
+      \draw[bbox, mainblue] (0.4,0.5) rectangle (1.4,1.5);
+      \draw[bbox, mainblue] (1.85,1.4) rectangle (2.75,2.3);
+      \draw[bbox, orange!80!black] (1.6,0.25) rectangle (3.0,0.85);
+      \node[font=\tiny, fill=mainblue, text=white, inner sep=1pt, anchor=south west]
+      at (0.4,1.5) {nut 0.97};
+      \node[font=\tiny, fill=mainblue, text=white, inner sep=1pt, anchor=north east]
+      at (1.85,2.3) {nut 0.91};
+      \node[font=\tiny, fill=orange!80!black, text=white, inner sep=1pt, anchor=north west]
+      at (1.6,0.25) {bolt 0.88};
+      \node[font=\small] at (1.6,-0.35) {boxes + labels};
+      \node[font=\small\bfseries] at (1.6,-0.95) {(b) object detection};
+    \end{scope}
+    % (c) semantic segmentation
+    \begin{scope}[xshift=7.4cm]
+      \scene{fill=mainblue!60, draw=mainblue}{fill=mainblue!60, draw=mainblue}
+      {fill=orange!60, draw=orange!80!black}
+      \node[font=\small] at (1.6,-0.35) {class of every pixel};
+      \node[font=\small\bfseries] at (1.6,-0.95) {(c) semantic segm.};
+    \end{scope}
+    % (d) instance segmentation
+    \begin{scope}[xshift=11.1cm]
+      \scene{fill=mainblue!60, draw=mainblue}{fill=green!50!black!50, draw=green!40!black}
+      {fill=orange!60, draw=orange!80!black}
+      \node[font=\small] at (1.6,-0.35) {pixels of every object};
+      \node[font=\small\bfseries] at (1.6,-0.95) {(d) instance segm.};
+    \end{scope}
+  \end{tikzpicture}
+  \caption{Four vision tasks on images of parts. (a) One label for the whole
+    image. (b) A box, class and confidence score for every object. (c) Each
+    pixel is coloured by class; the two nuts get the same colour. (d) Each
+    object gets its own mask, so the two nuts are distinguished.}
+  \label{fig:tasks}
+\end{figure}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{lll}
+    \toprule
+    Task                   & Output per image                        & Loss (main parts)     \\
+    \midrule
+    Classification         & $C$ class scores                        & cross-entropy         \\
+    Object detection       & a list of (box, class, score)           & box regression + CE   \\
+    Semantic segmentation  & $C$ scores per pixel, shape $(C, H, W)$ & CE at every pixel     \\
+    Instance segmentation  & boxes + a pixel mask per object         & detection + mask loss \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+So far a CNN has answered one question per image: \emph{what is in it?} Many
+real problems need more: a robot must know \emph{where} each part lies, an
+inspection system must outline the scratch, and a traceability system must
+\emph{read} the serial number. The same convolutional feature extractor
+handles all of these; only the head and the loss change. Every loss is built
+from the two pieces of Section 3.4: a \emph{regression} loss for continuous
+outputs such as box coordinates, and \emph{cross-entropy} for class labels.
+This part is an overview; the details are left to an advanced topic.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Object Detection}
+
+A detector outputs, for every object, a \textbf{bounding box} (the smallest
+axis-aligned rectangle around it, given by its corners or by its centre and
+size), a class and a confidence score. A predicted box will never match the
+true box exactly, so overlap is measured by the \textbf{intersection over
+union}, $\text{IoU}(A, B) = \text{area}(A \cap B) / \text{area}(A \cup B)$,
+which is $1$ for identical boxes and $0$ for boxes that do not touch; a
+detection usually counts as correct if $\text{IoU} \ge 0.5$ with a true box of
+the same class. Because a detector looks at many positions, it often reports
+the same object several times. \textbf{Non-maximum suppression (NMS)} keeps
+the highest-scoring box and deletes every other box of the same class whose
+IoU with it is above a threshold, then repeats with the boxes that are left.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.7cm, y=0.7cm]
+    \draw[gray!30, step=1] (0,0) grid (7,6);
+    \foreach \x in {0,...,7} \node[below, font=\scriptsize, gray] at (\x,0) {\x};
+    \foreach \y in {0,...,6} \node[left, font=\scriptsize, gray] at (0,\y) {\y};
+    \fill[purple!30] (2,1) rectangle (4,4);
+    \draw[bbox, mainblue] (0,0) rectangle (4,4);
+    \draw[bbox, orange!80!black] (2,1) rectangle (6,5);
+    \node[font=\small, mainblue] at (1,3.5) {$A$};
+    \node[font=\small, orange!80!black] at (5.4,4.5) {$B$};
+    \node[font=\scriptsize, purple!70!black] at (3,2.5) {$A\cap B$};
+  \end{tikzpicture}
+  \caption{Boxes $A = (0, 0, 4, 4)$ and $B = (2, 1, 6, 5)$ in corner format.
+    Their intersection is shaded.}
+  \label{fig:iou}
+\end{figure}
+
+\textbf{Two-stage detectors} (R-CNN, Faster R-CNN) first propose regions
+that may contain an object, then classify each one; they are accurate but
+slower. \textbf{One-stage detectors} such as \textbf{YOLO} (``You Only Look
+Once'') predict all boxes in a single forward pass, fast enough for live
+video, and are the usual first choice in industry. YOLO divides the image into
+an $S \times S$ grid; the cell containing an object's centre predicts $B$
+boxes (each with $x_c, y_c, w, h$ and a confidence) and $C$ class
+probabilities, so the whole output is one tensor of shape
+$S \times S \times (5B + C)$, followed by NMS. Detectors are evaluated by
+\textbf{precision} (how many reported boxes are right) and \textbf{recall}
+(how many true objects were found), summarised over all classes as the
+\textbf{mAP}.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=0.75cm, y=0.75cm]
+    \draw[frame] (0,0) rectangle (7,7);
+    \fill[mainblue!15] (2,3) rectangle (3,4);
+    \draw[gray!60, step=1] (0,0) grid (7,7);
+    \filldraw[fill=gray!45, draw=gray!80!black] (2.6,3.4) circle (1.1);
+    \filldraw[fill=gray!8, draw=gray!80!black] (2.6,3.4) circle (0.45);
+    \fill[mainblue!45, opacity=0.55] (2,3) rectangle (3,4);
+    \draw[mainblue, thick] (2,3) rectangle (3,4);
+    \draw[bbox, mainblue] (1.5,2.3) rectangle (3.7,4.5);
+    \fill[red!70!black] (2.6,3.4) circle (2.5pt);
+    \node[font=\scriptsize, anchor=west, align=left] at (7.4,3.4)
+    {the cell containing the\\object's centre (red dot)\\predicts its box};
+    \draw[brace] (0,7.15) -- node[above=4pt, font=\small] {$S = 7$} (7,7.15);
+  \end{tikzpicture}
+  \caption{YOLO divides the image into an $S \times S$ grid. The shaded cell
+    contains the centre of the nut and is responsible for its box. The
+    object's centre can lie anywhere inside the cell; the cell predicts the
+    box centre as an offset within it, and the box itself can be much larger
+    than the cell.}
+  \label{fig:yolo}
+\end{figure}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Segmentation}
+
+\textbf{Semantic segmentation} classifies every pixel: for $C$ classes the
+network outputs a $(C, H, W)$ tensor of logits, with a softmax at each pixel
+and the cross-entropy averaged over all pixels. A classification CNN shrinks
+the feature maps, but segmentation needs the answer back at full resolution,
+so it uses an \textbf{encoder--decoder}: an ordinary CNN encoder downsamples,
+and a decoder upsamples again. The popular \textbf{U-Net} (2015) adds skip
+connections that copy fine detail from each encoder level to the decoder level
+of the same size. \textbf{Instance segmentation} (e.g.\ Mask R-CNN) combines
+both ideas: a detector finds each object, and a small segmentation head
+predicts a mask inside each box.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, scale=0.95, every node/.style={transform shape}]
+    \cuboid[-1.6]{0}{0.3}{2.8}{gray}{input\\$(3,H,W)$}
+    \cuboid[-1.6]{1.6}{0.5}{2.2}{mainblue}{}
+    \cuboid[-1.6]{3.3}{0.8}{1.4}{mainblue}{}
+    \cuboid[-1.6]{5.4}{1.1}{0.8}{mainblue}{bottleneck}
+    \cuboid[-1.6]{7.8}{0.8}{1.4}{orange}{}
+    \cuboid[-1.6]{9.8}{0.5}{2.2}{orange}{}
+    \cuboid[-1.6]{11.5}{0.3}{2.8}{green!60!black}{output\\$(C,H,W)$}
+    \draw[->, thick] (1.0,0) -- (1.5,0);
+    \draw[->, thick] (2.5,0) -- (3.2,0);
+    \draw[->, thick] (4.4,0) -- (5.3,0);
+    \draw[->, thick] (6.8,0) -- (7.7,0);
+    \draw[->, thick] (9.0,0) -- (9.7,0);
+    \draw[->, thick] (10.8,0) -- (11.4,0);
+    \draw[->, red!70!black, thick, dashed] (2.0,1.7) to[bend left=18] (10.0,1.7);
+    \draw[->, red!70!black, thick, dashed] (3.7,1.2) to[bend left=18] (8.2,1.2);
+    \node[font=\small, red!70!black] at (6.0,2.9) {skip connections};
+    \draw[brace] (4.9,-2.6) -- node[below=5pt, font=\small] {encoder (downsample)} (0,-2.6);
+    \draw[brace] (12.4,-2.6) -- node[below=5pt, font=\small] {decoder (upsample)} (7.6,-2.6);
+  \end{tikzpicture}
+  \caption{An encoder--decoder for segmentation in the style of U-Net. The
+    output has one score map per class, at the input resolution.}
+  \label{fig:unet}
+\end{figure}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Optical Character Recognition (OCR)}
+
+\textbf{OCR} turns text in an image into a string: a serial number on a part,
+a lot code and expiry date on a package, the reading of a meter. Modern OCR
+systems are a pipeline of the tasks above. \textbf{Text detection} finds the
+regions that contain text, using detection or segmentation. \textbf{Text
+recognition} then reads each cropped line: instead of cutting it into single
+characters, modern recognisers such as \textbf{CRNN} run a CNN over the whole
+line, read the feature map column by column as a sequence, and are trained
+with the \textbf{CTC} loss, which does not need to know where each character
+is. Finally, \textbf{post-processing} corrects the string with known formats,
+dictionaries or checksums. Ready-made libraries include \textbf{Tesseract},
+\textbf{EasyOCR} and \textbf{PaddleOCR}.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=0.75cm,
+      opbox/.append style={minimum height=0.9cm, minimum width=1.9cm}]
+    \node[opbox] (img) {image};
+    \node[opbox, right=of img] (det) {text\\detection};
+    \node[opbox, right=of det] (crop) {crop each\\text line};
+    \node[opbox, right=of crop] (rec) {text\\recognition};
+    \node[opbox, right=of rec] (post) {post-\\processing};
+    \draw[->, thick] (img) -- (det);
+    \draw[->, thick] (det) -- (crop);
+    \draw[->, thick] (crop) -- (rec);
+    \draw[->, thick] (rec) -- (post);
+    \node[below=0.35cm of rec, font=\scriptsize\ttfamily] {L0T 2407-B};
+    \node[below=0.35cm of post, font=\scriptsize\ttfamily] {LOT 2407-B};
+    \node[below=0.35cm of det, font=\scriptsize\itshape, gray, align=center]
+    {a detection or\\segmentation CNN};
+  \end{tikzpicture}
+  \caption{An OCR pipeline. Post-processing applies known rules (here: the
+    code starts with the word \texttt{LOT}, so the digit \texttt{0} must be the
+    letter \texttt{O}).}
+  \label{fig:ocr}
+\end{figure}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Vision in Manufacturing}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{5.2cm}
+      >{\raggedright\arraybackslash}p{3.6cm}
+      >{\raggedright\arraybackslash}p{5.4cm}}
+    \toprule
+    Application                         & Task                    & Example                                         \\
+    \midrule
+    Accept / reject a part              & classification          & surface defect type on steel sheet              \\
+    Locate defects or count parts       & object detection        & missing components on a PCB; parts on a conveyor \\
+    Measure defect shape and size       & segmentation            & crack or weld-seam outline                      \\
+    Robot picking                       & detection / instance segm. & grasp points in a bin of parts              \\
+    Traceability                        & OCR                     & serial numbers, lot codes, expiry dates         \\
+    Rare or unknown defects             & anomaly detection       & train only on good parts, flag anything unusual \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\begin{notebox}
+  \textbf{Practical advice.} Start from a pretrained model and fine-tune it
+  (transfer learning, Section~\ref{sec:transfer}); a few hundred well-labelled
+  images per class are often enough. Invest in consistent lighting and camera
+  position: a controlled image makes every task easier. Choose the evaluation
+  measure with the cost of errors in mind: a missed defect (low recall) is
+  usually far more expensive than a false alarm.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Summary}
+
+\begin{itemize}
+  \item LeNet-5 set the pattern: conv--pool blocks followed by dense layers.
+  \item AlexNet (2012) showed that a large CNN trained on GPUs with ReLU,
+        augmentation and dropout beats hand-designed features by a wide
+        margin.
+  \item VGG: stacks of $3\times3$ kernels. GoogLeNet: parallel branches with
+        $1\times1$ bottlenecks. ResNet: skip connections,
+        $\text{output} = \relu(F(\bH) + \bH)$, make 100+ layers trainable.
+  \item SqueezeNet, MobileNet (depthwise separable convolutions) and
+        EfficientNet (compound scaling) reach good accuracy with few
+        parameters and little computation.
+  \item Vision transformers replace convolution with attention on image
+        patches; ConvNeXt shows a modernised CNN does as well. Compare
+        networks by top-1 accuracy, parameters and GFLOPs together.
+  \item Transfer learning reuses an ImageNet feature extractor and retrains
+        only a new head, so a few hundred images can be enough.
+  \item Detection, segmentation and OCR share the CNN feature extractor and
+        differ in the head and the loss. Detection uses boxes, IoU and NMS;
+        YOLO predicts all boxes in one pass. Segmentation predicts a class per
+        pixel with an encoder--decoder such as U-Net. OCR detects text, then
+        recognises each line as a sequence.
+\end{itemize}
+
+\paragraph{Advanced topics.}
+The YOLO loss function and anchor boxes, the details of CTC, transposed
+convolutions and modern segmentation models, and anomaly detection will be
+covered in a later topic.
+
+\end{document}

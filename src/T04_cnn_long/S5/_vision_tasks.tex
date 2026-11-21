@@ -239,6 +239,7 @@ several times with slightly different boxes. \textbf{Non-maximum suppression
 \begin{stepbox}{Exercise 3 \quad Run NMS by hand}
   A detector reports four ``nut'' boxes with scores $A{:}\,0.90$,
   $B{:}\,0.80$, $C{:}\,0.75$, $D{:}\,0.60$. Their pairwise IoU is
+  \vspace{0.5cm}
   \begin{center}
     \renewcommand{\arraystretch}{1.3}
     \begin{tabular}{c|cccc}
@@ -250,6 +251,7 @@ several times with slightly different boxes. \textbf{Non-maximum suppression
       $D$ & 0.05 & 0.10 & 0.60 & ---  \\
     \end{tabular}
   \end{center}
+  \vspace{0.5cm}
   Use threshold $0.5$.
   \begin{enumerate}[label=(\alph*), nosep]
     \item Round 1: keep $\sol[1cm]{A}$; delete $\sol[2.5cm]{B\ (\text{IoU } 0.70)}$.
@@ -303,7 +305,10 @@ for detecting it. Every cell predicts:
     \draw[brace] (0,7.15) -- node[above=4pt, font=\small] {$S = 7$} (7,7.15);
   \end{tikzpicture}
   \caption{YOLO divides the image into an $S \times S$ grid. The shaded cell
-    contains the centre of the nut and is responsible for its box.}
+    contains the centre of the nut and is responsible for its box. The
+    object's centre can lie anywhere inside the cell; the cell predicts the
+    box centre as an offset within it, and the box itself can be much larger
+    than the cell.}
   \label{fig:yolo}
 \end{figure}
 

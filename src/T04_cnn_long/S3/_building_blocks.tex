@@ -228,6 +228,7 @@ not care \emph{where} in the window the largest value is.
   A detector stage produced the 1-D output $\bh_A$. In $\bh_B$ the input was
   shifted one pixel to the right, so every value moved one place. Apply max
   pooling with window $3$ and stride $1$.
+  \vspace{0.5cm}
   \begin{center}
     \renewcommand{\arraystretch}{1.4}
     \begin{tabular}{l*{7}{c}}
@@ -242,6 +243,7 @@ not care \emph{where} in the window the largest value is.
       \bottomrule
     \end{tabular}
   \end{center}
+  \vspace{0.5cm}
   Between $\bh_A$ and $\bh_B$, $\sol[1cm]{7}$ of the $7$ detector values
   changed, but only $\sol[1cm]{1}$ of the $5$ pooled values changed.
 \end{stepbox}
@@ -346,6 +348,7 @@ applies softmax and cross-entropy together.
 \begin{stepbox}{Exercise 4 \quad Trace the network}
   Fill in the output shape (for one image) and the number of parameters of
   every layer in the model above.
+  \vspace{0.5cm}
   \begin{center}
     \renewcommand{\arraystretch}{1.35}
     \begin{tabular}{lll}
@@ -366,6 +369,7 @@ applies softmax and cross-entropy together.
       \bottomrule
     \end{tabular}
   \end{center}
+  \vspace{0.5cm}
   What percentage of the parameters is in the two convolutional layers?
   \[
     \sol[5cm]{4\,800 / 206\,922 \approx 2.3\%}

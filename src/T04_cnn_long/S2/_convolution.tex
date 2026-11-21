@@ -87,6 +87,14 @@ position $i$, multiply the overlapping entries, and add:
   The output has length $n - k + 1$.
 \end{resultbox}
 
+\paragraph{Why $i + u - 1$?}
+Both the input and the kernel are numbered from $1$. The window for $z_i$
+starts at $x_i$, so kernel entry $w_u$ meets the input $u - 1$ places further
+on: $w_1$ meets $x_i$, $w_2$ meets $x_{i+1}$, \dots, $w_k$ meets
+$x_{i+k-1}$. The last window must still fit, $i + k - 1 \le n$, which is where
+the output length $n - k + 1$ comes from. (With 0-based indexing, as in
+Python, the formula is simply $z_i = \sum_{u} w_u\, x_{i+u} + b$.)
+
 \begin{figure}[H]
   \centering
   \begin{tikzpicture}[x=0.9cm, y=0.9cm, >=Stealth]
@@ -158,7 +166,10 @@ $k \times k$ patch beneath it and add everything up.
 
 The output is called a \textbf{feature map}: entry $z_{i,j}$ says how
 strongly the pattern in the kernel is present in the patch whose top-left
-corner is pixel $(i, j)$.
+corner is pixel $(i, j)$. As in one dimension, the $-1$ in the indices makes
+the kernel's top-left entry $w_{1,1}$ meet that corner pixel $x_{i,j}$, and
+the last window must fit inside the image, giving the output size
+$(H - k + 1) \times (W - k + 1)$.
 
 \begin{figure}[H]
   \centering
@@ -378,6 +389,7 @@ dimensions it is applied to the height and the width separately.
             \sol[0.9cm]{0}\,\bigr)$.
     \item Complete the table.
   \end{enumerate}
+  \vspace{0.5cm}
   \begin{center}
     \renewcommand{\arraystretch}{1.4}
     \begin{tabular}{ccccc}
@@ -393,6 +405,7 @@ dimensions it is applied to the height and the width separately.
       \bottomrule
     \end{tabular}
   \end{center}
+  \vspace{0.5cm}
   The last row is the first layer of ResNet (Section 4.4).
 \end{stepbox}
 
@@ -565,6 +578,7 @@ print(conv(x).shape)       # torch.Size([64, 32, 28, 28])
 \begin{stepbox}{Exercise 6 \quad Shapes and parameters}
   A batch of colour images of size $32 \times 32$ passes through two
   convolutional layers (stride $1$).
+  \vspace{0.5cm}
   \begin{center}
     \renewcommand{\arraystretch}{1.4}
     \begin{tabular}{lccc}
@@ -577,6 +591,7 @@ print(conv(x).shape)       # torch.Size([64, 32, 28, 28])
       \bottomrule
     \end{tabular}
   \end{center}
+  \vspace{0.5cm}
   A dense layer mapping the same input ($3 \cdot 32 \cdot 32$ values) to the
   same first output ($32 \cdot 28 \cdot 28$ values) would need
   \[
