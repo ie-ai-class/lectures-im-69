@@ -161,7 +161,7 @@ not overlap and each feature map shrinks to half its height and width.
     \node[layerlabel] at (2,-4.7) {$\bH$ ($4\times4$)};
 
     \draw[->, thick] (4.8,-2) -- node[above, font=\small, align=center]
-    {$2\times2$ max\\stride 2} (8.2,-2);
+    {$2\times2$ window\\max \emph{or} average\\stride 2} (8.2,-2);
 
     \fill[orange!25]   (9,-1)  rectangle (10,-2);
     \fill[mainblue!20] (10,-1) rectangle (11,-2);
@@ -170,13 +170,14 @@ not overlap and each feature map shrinks to half its height and width.
     \draw[thick, step=1] (9,-1) grid (11,-3);
     \node[layerlabel] at (10,-3.7) {output ($2\times2$)};
   \end{tikzpicture}
-  \caption{Max pooling with a $2 \times 2$ window and stride $2$. Each
-    coloured block of four values becomes one output value.}
-  \label{fig:maxpool}
+  \caption{Pooling with a $2 \times 2$ window and stride $2$. Each coloured
+    block of four values becomes one output value: its largest value for max
+    pooling, or its mean for average pooling.}
+  \label{fig:pooling}
 \end{figure}
 
 \begin{stepbox}{Exercise 2 \quad Max and average pooling}
-  Pool the feature map $\bH$ from Exercise 1 (Figure~\ref{fig:maxpool}) with
+  Pool the feature map $\bH$ from Exercise 1 (Figure~\ref{fig:pooling}) with
   a $2 \times 2$ window and stride $2$.
   \[
     \text{max pooling:}\;
@@ -376,7 +377,7 @@ applies softmax and cross-entropy together.
   \]
 \end{stepbox}
 
-Two observations:
+Three observations:
 \begin{itemize}
   \item This CNN has \emph{more} parameters than the MLP $784 \to 128 \to 10$
         (101\,770), yet it is more accurate on MNIST (around 99\% vs.\ 98\%)
@@ -384,13 +385,19 @@ Two observations:
         many parameters a model has but how they are \emph{arranged}.
   \item Almost all the parameters sit in the first dense layer, which looks
         at the flattened $32 \times 7 \times 7$ maps. The convolutions, which do
-        the actual feature extraction, are cheap.
+        the actual feature extraction, are cheap in parameters.
+  \item In \emph{computation} the picture flips. A dense weight is used once
+        per image, but a convolution weight is reused at every output position
+        ($28 \times 28$ times in the first conv, $14 \times 14$ in the second).
+        The two convolutions do about $1.0$ million of the $1.2$ million
+        multiply-adds per image (around 83\%). Few parameters does not mean
+        little work.
 \end{itemize}
 
 % ──────────────────────────────────────────────────────────────────────────────
 \subsection{Global Average Pooling}
 
-The expensive dense layer can be removed. \textbf{Global average pooling}
+The parameter-heavy dense layer can be removed. \textbf{Global average pooling}
 (GAP) averages each channel over its \emph{entire} spatial extent, turning a
 $(C, H, W)$ tensor into a vector of $C$ numbers, one per feature. A single
 linear layer then maps these $C$ features to the logits. Most modern
@@ -415,6 +422,16 @@ architectures end this way. In PyTorch it is
   \end{enumerate}
 \end{stepbox}
 
+GAP is not free: it throws away \emph{where} each feature appears. In this
+shallow network each value of the last feature map sees only a $10 \times 10$
+patch of the image, so its features describe local pieces of strokes, and
+averaging them loses how the pieces are arranged (a loop above a stroke versus
+below it, as in a 9 versus a 6). The GAP model is therefore usually a little
+less accurate than the original. Modern networks are deep enough that each
+final feature sees the whole image, and they use hundreds of channels, so GAP
+loses very little there. Adding another convolution layer or more channels
+before the GAP closes most of the gap here too.
+
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Backpropagation Through Pooling}
 
@@ -436,7 +453,7 @@ layers.
   The max-pooling output of Exercise 2 receives the gradient
   $\partial J / \partial(\text{output}) =
     \begin{pmatrix} 0.5 & -1 \\ 2 & 0.3 \end{pmatrix}$.
-  Fill in $\partial J / \partial \bH$, using $\bH$ from Figure~\ref{fig:maxpool}.
+  Fill in $\partial J / \partial \bH$, using $\bH$ from Figure~\ref{fig:pooling}.
   \[
     \pd{J}{\bH} =
     \begin{pmatrix}
