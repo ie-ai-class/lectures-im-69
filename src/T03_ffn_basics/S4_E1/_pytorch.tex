@@ -1,0 +1,215 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
+
+% ── Local TikZ styles (match the forward-pass figure in S3) ─────────────────
+\usetikzlibrary{decorations.pathreplacing, backgrounds}
+\tikzset{
+  neuron/.style={circle, draw=mainblue, fill=boxbg,
+      minimum size=1.1cm, thick, font=\small},
+  preact/.style={circle, draw=mainblue, fill=white,
+      minimum size=1.1cm, thick, font=\small},
+  input/.style={circle, draw=gray!60, fill=gray!15,
+      minimum size=1.1cm, thick, font=\small},
+  lossnode/.style={circle, draw=red!70!black, fill=warnbg,
+      minimum size=1.1cm, thick, font=\small},
+  unitbox/.style={draw=gray!60, dashed, rounded corners=6pt},
+  % one curly brace under the figure = one piece of PyTorch code
+  modbrace/.style={decorate, decoration={brace, mirror, amplitude=5pt},
+      thick},
+  modlabel/.style={font=\scriptsize\ttfamily, align=center, below=7pt},
+  % light vertical band = the region of the figure a module computes
+  band/.style={rounded corners=4pt, draw=none},
+}
+% Module colors: one color per kind of PyTorch piece
+\colorlet{linearcol}{orange!80!black}
+\colorlet{actcol}{mainblue}
+\colorlet{losscol}{red!70!black}
+\colorlet{datacol}{gray!70!black}
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Section 3.4 (Extra) : PyTorch Implementation}} \\[0.3em]
+  {\large\itshape From the Diagram to \texttt{nn.Sequential}} \\[0.5em]
+  {\large AI-IM Class --- Lecture Notes}%
+  \ifstudentmode
+    \quad {\normalsize\color{gray}[Student Copy]}%
+  \fi
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The XOR Network in PyTorch}
+
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, scale=0.95, every node/.append style={transform shape}]
+    % ── Nodes (same layout as Section 3.3) ─────────────────────────────────────
+    \node[input]    (x1) at (0,    1.4) {$x_1$};
+    \node[input]    (x2) at (0,   -1.4) {$x_2$};
+    \node[preact]   (z1) at (3.6,  1.4) {$z^{(1)}_1$};
+    \node[neuron]   (h1) at (5.6,  1.4) {$h_1$};
+    \node[preact]   (z2) at (3.6, -1.4) {$z^{(1)}_2$};
+    \node[neuron]   (h2) at (5.6, -1.4) {$h_2$};
+    \node[preact]   (zo) at (9.2,  0)   {$z^{(2)}$};
+    \node[neuron]   (yh) at (11.2, 0)   {$\yhat$};
+    \node[lossnode] (J)  at (13.6, 0)   {$J$};
+    \node[input]    (y)  at (13.6, -1.6) {$y$};
+
+    % ── Shaded bands: the region each module computes ──────────────────────────
+    \begin{scope}[on background layer]
+      \fill[band, datacol!12]   (-0.7, -2.65) rectangle (0.7, 2.65);
+      \fill[band, linearcol!12] (0.75, -2.65) rectangle (4.25, 2.65);
+      \fill[band, actcol!12]    (4.3, -2.65) rectangle (6.25, 2.65);
+      \fill[band, linearcol!12] (6.3, -2.65) rectangle (9.85, 2.65);
+      \fill[band, actcol!12]    (9.9, -2.65) rectangle (11.85, 2.65);
+      \fill[band, losscol!10]   (11.9, -2.65) rectangle (14.3, 2.65);
+    \end{scope}
+
+    % ── Dashed boxes: one box = one neuron ─────────────────────────────────────
+    \draw[unitbox] (2.85,  0.65) rectangle (6.35,  2.05);
+    \draw[unitbox] (2.85, -2.05) rectangle (6.35, -0.65);
+    \draw[unitbox] (8.45, -0.75) rectangle (11.95, 0.75);
+
+    % ── Connections ────────────────────────────────────────────────────────────
+    \draw[->, thick] (x1) -- node[above, font=\scriptsize] {$w^{(1)}_{11}$} (z1);
+    \draw[->, thick] (x1) -- node[sloped, above, font=\scriptsize, pos=0.28] {$w^{(1)}_{21}$} (z2);
+    \draw[->, thick] (x2) -- node[sloped, below, font=\scriptsize, pos=0.28] {$w^{(1)}_{12}$} (z1);
+    \draw[->, thick] (x2) -- node[below, font=\scriptsize] {$w^{(1)}_{22}$} (z2);
+    \draw[->, thick, mainblue] (z1) -- node[above, font=\small] {$\sigmoid$} (h1);
+    \draw[->, thick, mainblue] (z2) -- node[above, font=\small] {$\sigmoid$} (h2);
+    \draw[->, thick, mainblue] (zo) -- node[above, font=\small] {$g$} (yh);
+    \draw[->, thick] (h1) -- node[above right, font=\scriptsize, pos=0.45] {$w^{(2)}_1$} (zo);
+    \draw[->, thick] (h2) -- node[below right, font=\scriptsize, pos=0.45] {$w^{(2)}_2$} (zo);
+    \draw[->, thick, red!70!black] (yh) -- (J);
+    \draw[->, thick, red!70!black] (y)  -- (J);
+
+    % ── Annotations ────────────────────────────────────────────────────────────
+    \node[font=\scriptsize, gray!80!black] at (3.6,  2.35) {$+\,b^{(1)}_1$};
+    \node[font=\scriptsize, gray!80!black] at (3.6, -2.35) {$+\,b^{(1)}_2$};
+    \node[font=\scriptsize, gray!80!black] at (9.2,  1.0) {$+\,b^{(2)}$};
+
+    % ── Layer labels (the diagram's view) ──────────────────────────────────────
+    \node[font=\small\itshape, gray] at (0,    3.0) {Input layer};
+    \node[font=\small\itshape, gray] at (4.6,  3.0) {Hidden layer};
+    \node[font=\small\itshape, gray] at (10.2, 3.0) {Output layer};
+    \node[font=\small\itshape, gray] at (13.1, 3.0) {Loss};
+
+    % ── Braces, row 1: regression (S41) ────────────────────────────────────────
+    \node[font=\small\bfseries, anchor=west] at (-0.7, -3.0) {Regression};
+    \draw[modbrace, datacol]   (-0.6, -3.35) -- (0.6,  -3.35)
+    node[midway, modlabel] {X\\[-1pt]\textrm{\scriptsize(data)}};
+    \draw[modbrace, linearcol] (0.8,  -3.35) -- (4.2,  -3.35)
+    node[midway, modlabel] {nn.Linear(2, 2)};
+    \draw[modbrace, actcol]    (4.35, -3.35) -- (6.2,  -3.35)
+    node[midway, modlabel] {nn.Sigmoid()};
+    \draw[modbrace, linearcol] (6.35, -3.35) -- (9.8,  -3.35)
+    node[midway, modlabel] {nn.Linear(2, 1)};
+    \draw[modbrace, actcol]    (9.95, -3.35) -- (11.8, -3.35)
+    node[midway, modlabel] {\textrm{identity}\\[-1pt]$g(z)=z$};
+    \draw[modbrace, losscol]   (11.95,-3.35) -- (14.2, -3.35)
+    node[midway, modlabel] {nn.MSELoss()};
+
+    % ── Braces, row 2: classification (S42) ────────────────────────────────────
+    \node[font=\small\bfseries, anchor=west] at (-0.7, -4.7) {Classification};
+    \draw[modbrace, datacol]   (-0.6, -5.05) -- (0.6,  -5.05)
+    node[midway, modlabel] {X};
+    \draw[modbrace, linearcol] (0.8,  -5.05) -- (4.2,  -5.05)
+    node[midway, modlabel] {nn.Linear(2, 2)};
+    \draw[modbrace, actcol]    (4.35, -5.05) -- (6.2,  -5.05)
+    node[midway, modlabel] {nn.Sigmoid()};
+    \draw[modbrace, linearcol] (6.35, -5.05) -- (9.8,  -5.05)
+    node[midway, modlabel] {nn.Linear(2, 1)};
+    \draw[modbrace, losscol]   (9.95, -5.05) -- (14.2, -5.05)
+    node[midway, modlabel] {nn.BCEWithLogitsLoss()\\[-1pt]\textrm{\scriptsize$g=\sigmoid$ is inside the loss}};
+
+    % ── Where model(X) stops ───────────────────────────────────────────────────
+    \draw[densely dashed, thick, gray!70!black] (9.875, 2.75) -- (9.875, -6.1);
+    \node[font=\scriptsize, gray!70!black, anchor=north east, align=right]
+    at (9.8, -5.75) {\texttt{model(X)} stops here and\\returns $z^{(2)}$};
+  \end{tikzpicture}
+  \caption{The Section 3.3 network with each piece of PyTorch code marked
+    under the part of the diagram it computes. }
+  \label{fig:pytorch-map}
+\end{figure}
+
+
+\begin{codebox}
+model = nn.Sequential(
+    nn.Linear(2, 2),  # hidden layer: 2 inputs -> 2 neurons
+    nn.Sigmoid(),     # non-linearity (without it, the model is just linear)
+    nn.Linear(2, 1),  # output layer: 2 neurons -> 1 real-valued prediction
+)
+loss_fn = nn.MSELoss()
+\end{codebox}
+
+\begin{notebox}
+  \textbf{Key idea.} A diagram draws \emph{values} as nodes. A PyTorch module
+  is an \emph{operation}: it takes one set of values and produces the next.
+  So a module corresponds to the \emph{arrows} between nodes, not to the
+  nodes themselves.
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The End of the Network: Output Activation and Loss}
+
+The model in both scripts \emph{ends at $z^{(2)}$}. What happens next
+depends on the task.
+
+\subsection{Regression}
+
+The output activation is the \textbf{identity}, $g(z) = z$, so
+$\yhat = z^{(2)}$ can be any real number.
+\begin{codebox}
+y_pred = model(X)          # = z^(2) = y_hat
+loss = loss_fn(y_pred, y)  # nn.MSELoss()
+\end{codebox}
+\texttt{nn.MSELoss()} computes the squared error of Section 3.3,
+\emph{averaged} over the samples in the batch:
+\[
+  J = \frac{1}{n}\sum_{i=1}^{n} \left(y_i - \yhat_i\right)^2,
+  \qquad n = 4 \text{ for XOR.}
+\]
+
+\subsection{Classification}
+
+For a yes/no label we want $\yhat$ to be a probability, so the output
+activation is $g = \sigmoid$.
+\begin{codebox}
+logits = model(X)          # = z^(2), called a "logit"
+loss = loss_fn(logits, y)  # nn.BCEWithLogitsLoss()
+\end{codebox}
+Here, the output sigmoid has moved into the loss.
+\texttt{nn.BCEWithLogitsLoss()} does two steps at once:
+\[
+  \underbrace{p = \sigmoid\!\left(z^{(2)}\right)}_{\text{output activation}}
+  \quad\text{then}\quad
+  \underbrace{J = -\frac{1}{n}\sum_{i=1}^{n}
+    \Big[y_i \ln p_i + (1-y_i)\ln(1-p_i)\Big]}_{\text{binary cross-entropy}}.
+\]
+Combining them is more numerically stable (it never computes $\ln 0$). To get probabilities after training, apply the sigmoid yourself:
+\begin{codebox}
+probs = torch.sigmoid(model(X))  # z^(2) -> p in (0, 1)
+preds = (probs >= 0.5).float()   # p -> class 0 or 1
+\end{codebox}
+
+\begin{warnbox}
+  \textbf{Do not apply the sigmoid twice.} If you add \texttt{nn.Sigmoid()}
+  at the end of the model \emph{and} use \texttt{nn.BCEWithLogitsLoss()},
+  the network computes $\sigmoid(\sigmoid(z))$.
+\end{warnbox}
+
+
+\end{document}
