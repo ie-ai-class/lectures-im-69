@@ -638,17 +638,57 @@ filters need $C_{\text{in}}$ equal to the previous layer's $C_{\text{out}}$.
         \draw[->, \col!80!black, thick] (13.4, \y-0.6) -- (19.6, -0.6-0.5*\f);
       }
     \node[layerlabel, align=center] at (11.7,-8.3)
-    {$C_{\text{out}} = 3$ filters, each $(3, k, k)$};
+    {layer 1: $C_{\text{out}} = 3$ filters, each $(3, k, k)$};
 
     \foreach \col/\s in {green!50!black/2, mainblue/1, red/0}
     \filldraw[fill=\col!15, draw=\col!80!black, thick]
     (20+0.6*\s, 0.6*\s) rectangle ++(4,-4);
     \node[layerlabel, align=center] at (22.6,-6.6) {output\\$(3, H', W')$};
+
+    % ── layer 2: the 3-channel output becomes the next input ──
+    \draw[->, thick, dashed, gray!70!black]
+    (22.6,-7.6) -- (22.6,-10) -- (2.6,-10) -- (2.6,-15.4);
+    \node[font=\scriptsize, fill=white, inner sep=2pt] at (12.6,-10)
+    {output of layer 1 $=$ input of layer 2};
+
+    \begin{scope}[yshift=-17*0.45cm]
+      \foreach \col/\s in {green!50!black/2, mainblue/1, red/0}
+      \filldraw[fill=\col!15, draw=\col!80!black, thick]
+      (0.6*\s, 0.6*\s) rectangle ++(4,-4);
+      \node[layerlabel, align=center] at (2.6,-5.6) {input\\$(3, H', W')$};
+
+      \foreach \f/\col/\y in {1/orange/4.0, 2/violet/1.2, 3/teal/-1.6,
+          4/brown/-4.4, 5/magenta/-7.2} {
+          \begin{scope}[xshift=4.6cm, yshift=\y*0.45cm]
+            \foreach \s in {2,1,0}
+            \filldraw[fill=\col!25, draw=\col!80!black]
+            (0.4*\s, 0.4*\s) rectangle ++(1.6,-1.6);
+          \end{scope}
+          \draw[->, \col!80!black, thick] (13.4, \y-0.6) -- (19.6, 0.4-0.5*\f);
+        }
+      \node[layerlabel, align=center] at (11.7,-10.1)
+      {layer 2: $C_{\text{out}} = 5$ filters, each $(3, k, k)$};
+
+      \foreach \col/\s in {magenta/4, brown/3, teal/2, violet/1, orange/0}
+      \filldraw[fill=\col!15, draw=\col!80!black, thick]
+      (20+0.5*\s, 0.5*\s) rectangle ++(4,-4);
+      \node[layerlabel, align=center] at (23,-5.6) {output\\$(5, H'', W'')$};
+    \end{scope}
   \end{tikzpicture}
-  \caption{A layer with $C_{\text{out}} = 3$ filters produces an output with
-    three channels: one feature map per filter.}
+  \caption{Top: a layer with $C_{\text{out}} = 3$ filters produces an output
+    with three channels, one feature map per filter. Bottom: that output is
+    the input of the next layer, so each of its filters has $3$ slices; with
+    $C_{\text{out}} = 5$ filters, the output has five channels. Only the
+    image's channels mean RGB; deeper channels are learned feature maps, and
+    how many there are is a design choice.}
   \label{fig:filters}
 \end{figure}
+
+% ──────────────────────────────────────────────────────────────────────────────
+\subsection{Counting Parameters}
+
+Each filter holds $C_{\text{in}} \cdot k \cdot k$ weights and one bias, and a
+layer has $C_{\text{out}}$ filters.
 
 \begin{resultbox}
   A convolutional layer with $C_{\text{in}}$ input channels, $C_{\text{out}}$
