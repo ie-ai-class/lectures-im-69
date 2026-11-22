@@ -4,9 +4,10 @@
 - Semester: `Winter 2026`
 - Instructors: [Asst. Prof. Nirand Pisutha-Arnond, Ph.D., Department of Industrial Engineering](https://ie.eng.cmu.ac.th/en/people/faculty/56)
 
-## Lecture VDO Playlist
+## Resources
 
-- [AI-IM Class 2569](https://youtube.com/playlist?list=PLW3i8Y6gZ2uE&si=9M8LOXm5Q1AD91Y5)
+- [VDO Playlist](https://youtube.com/playlist?list=PLW3i8Y6gZ2uE&si=9M8LOXm5Q1AD91Y5)
+- [Safe Exam Browser](https://drive.google.com/drive/folders/1tJUrpBHI9t2uLxPL0K6T4KpMwB1Oyw9v?usp=sharing)
 
 ## Introduction
 
@@ -59,6 +60,7 @@
 - Exercise: [PDF](/src/T03_ffn_basics/S4/mlp_student.pdf)
 - Solution: [PDF](/src/T03_ffn_basics/S4/mlp_solution.pdf)
 - Resources:
+  - [PyTorch Implementation](/src/T03_ffn_basics/S4_E1/pytorch_solution.pdf)
   - [XOR Regression](https://github.com/ie-ai-class/codes-im-69/blob/main/src/T03_ffn_basics/S41_XOR_regression.py)
   - [XOR Classification](https://github.com/ie-ai-class/codes-im-69/blob/main/src/T03_ffn_basics/S42_XOR_classification.py)
   - [Diabetes Progression Prediction](https://github.com/ie-ai-class/codes-im-69/blob/main/src/T03_ffn_basics/S43_regression.ipynb)
