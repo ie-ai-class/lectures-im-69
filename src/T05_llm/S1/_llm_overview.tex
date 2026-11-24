@@ -1,0 +1,734 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Shared preamble (src/lecturenotes.sty) ────────────────────────────────────
+%   Packages, colors, boxes, \sol/\soleq and math macros all live in
+%   src/*.sty. \input@path points LaTeX two folders up to find them.
+\makeatletter
+\def\input@path{{../../}}
+\makeatother
+\usepackage{lecturenotes}
+
+% ── Local macros ──────────────────────────────────────────────────────────────
+\providecommand{\bh}{\mathbf{h}}
+\newcommand{\tok}[1]{\textsf{#1}}   % a word / token as the model sees it
+
+% ── Local TikZ styles ─────────────────────────────────────────────────────────
+\usetikzlibrary{decorations.pathreplacing}
+\tikzset{
+  layerlabel/.style={font=\small\itshape, gray},
+  brace/.style={decorate, decoration={brace, amplitude=4pt}, thick, gray},
+  word/.style={draw=gray!70, fill=white, rounded corners=2pt,
+      minimum height=0.65cm, inner xsep=4pt, font=\small\sffamily},
+  cell/.style={draw=mainblue, fill=boxbg, thick, rounded corners=3pt,
+      minimum size=0.9cm, font=\small},
+  opbox/.style={draw=orange!70!black, fill=notebg, thick, rounded corners=4pt,
+      minimum height=1.1cm, text width=3.2cm, font=\small, align=center},
+  era/.style={circle, fill=mainblue, inner sep=2pt},
+}
+
+% Bullet lists: one short sentence per item, little vertical space
+\setlist[itemize]{nosep}
+
+% ── Document ──────────────────────────────────────────────────────────────────
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Section 5.1: From RNN to LLM}} \\[0.3em]
+  {\large\itshape A Roadmap of Language Models} \\[0.5em]
+  {\large AI-IM Class --- Lecture Notes}%
+  \ifstudentmode
+    \quad {\normalsize\color{gray}[Student Copy]}%
+  \fi
+\end{center}
+
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+\begin{itemize}
+  \item In Chapter 4 the input was an \textbf{image}; now it is
+        \textbf{text}.
+  \item This is a bird's-eye view of 30 years of research, up to ChatGPT
+        and Claude.
+  \item One question runs through it all:
+        \emph{how can a computer predict the next word well?}
+  \item Each step fixes a weakness of the step before it.
+\end{itemize}
+
+\paragraph{Roadmap.}
+\begin{itemize}
+  \item First we define the task: \textbf{next-word prediction}.
+  \item Then we follow the models: N-grams $\to$ embeddings $\to$ RNN $\to$
+        Transformer.
+  \item We see what \textbf{scale} did to Transformers (GPT-3).
+  \item We see how a text predictor became an \textbf{assistant} (ChatGPT).
+  \item Finally, we look at where the field is now.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=1.45cm, >=Stealth]
+    \draw[->, very thick, gray] (-0.3,0) -- (10.4,0);
+    \foreach \x/\yr/\lbl/\pos in {
+        0/1990s/N-grams/above,
+        1.2/1997/LSTM/below,
+        2.4/2013/word2vec/above,
+        3.6/2014/{seq2seq,\\attention}/below,
+        4.8/2017/Transformer/above,
+        6.0/2018/{BERT, GPT-1}/below,
+        7.2/2020/GPT-3/above,
+        8.4/2022/ChatGPT/below,
+        9.6/2024+/{reasoning,\\agents}/above} {
+        \node[era] at (\x,0) {};
+        \ifnum\pdfstrcmp{\pos}{above}=0
+          \node[above=3pt, font=\scriptsize\bfseries] at (\x,0) {\yr};
+          \node[above=16pt, font=\scriptsize, align=center] at (\x,0) {\lbl};
+        \else
+          \node[below=3pt, font=\scriptsize\bfseries] at (\x,0) {\yr};
+          \node[below=16pt, font=\scriptsize, align=center, anchor=north]
+          at (\x,0) {\lbl};
+        \fi
+      }
+  \end{tikzpicture}
+  \caption{The roadmap of this section.}
+  \label{fig:timeline}
+\end{figure}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{The Task: Predict the Next Word}
+\label{sec:task}
+
+\paragraph{NLP and LLMs.}
+\begin{itemize}
+  \item \textbf{Natural language processing} (NLP) is the part of AI that
+        works with human language.
+  \item Its tasks include translation, question answering, summarisation and
+        speech-to-text.
+  \item A \textbf{large language model} (LLM) is one model that can do almost
+        all of them.
+\end{itemize}
+
+\paragraph{What is the ``label'' for text?}
+\begin{itemize}
+  \item An image classifier predicts the right label for an image.
+  \item A text model is given the words so far and
+        \textbf{predicts the next word}.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth]
+    \node[word] (a) at (0,0) {The};
+    \node[word, right=2pt of a] (b) {sky};
+    \node[word, right=2pt of b] (c) {is};
+    \node[word, right=2pt of c, draw=orange!80!black, thick, dashed,
+      minimum width=1.2cm] (d) {?};
+    \node[opbox, right=1.0cm of d, text width=2.2cm] (lm) {language\\model};
+    \draw[->, thick] (d) -- (lm);
+    \begin{scope}[shift={($(lm.east)+(2.0,1.1)$)}]
+      \foreach \w/\p [count=\i] in {blue/3.5, clear/2.2, the/1.6,
+          falling/0.9, red/0.15} {
+          \node[anchor=east, font=\small\sffamily] at (0,-\i*0.45) {\w};
+          \fill[mainblue!70] (0.1,-\i*0.45-0.15) rectangle ++(\p,0.3);
+        }
+      \node[font=\scriptsize, gray, anchor=west] at (0.1,-2.75)
+      {probability of each next word};
+    \end{scope}
+    \draw[->, thick] (lm.east) -- ++(0.6,0);
+  \end{tikzpicture}
+  \caption{The model gives a probability to every word in its vocabulary
+    (made-up numbers).}
+  \label{fig:nextword}
+\end{figure}
+
+\begin{resultbox}
+  A \textbf{language model} computes
+  \[
+    P(\text{next word} \mid \text{words so far}).
+  \]
+  To generate text, it picks a likely word, appends it, and repeats.
+\end{resultbox}
+
+\begin{itemize}
+  \item This is just \textbf{classification}: the classes are the words, with
+        a softmax and cross-entropy.
+  \item Every model in this section has this same output.
+  \item The models differ only in \emph{how they read the words so far}.
+\end{itemize}
+
+\paragraph{Tokens.}
+\begin{itemize}
+  \item Models see \textbf{tokens}, not whole words.
+  \item A frequent word is one token; a rare word is split into pieces, e.g.\
+        \tok{unbelievable} $\to$ \tok{un} + \tok{believ} + \tok{able}.
+  \item A modern vocabulary has about 50\,000 to 200\,000 tokens.
+  \item In these notes, ``word'' and ``token'' mean the same thing.
+\end{itemize}
+
+\begin{notebox}
+  \textbf{Try it.} \url{https://tiktokenizer.vercel.app}
+  \begin{itemize}
+    \item Paste one English and one Thai sentence.
+    \item Compare the token counts: more tokens means more cost.
+  \end{itemize}
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{N-grams: Counting}
+\label{sec:ngram}
+
+\begin{itemize}
+  \item The oldest approach is to read a lot of text and \textbf{count}.
+\end{itemize}
+\[
+  P(\tok{blue} \mid \tok{the sky is})
+  = \frac{\text{count}(\tok{the sky is blue})}{\text{count}(\tok{the sky is})}
+\]
+\begin{itemize}
+  \item An \textbf{N-gram} model looks only at the last $N - 1$ words.
+  \item The formula above is a 4-gram model.
+\end{itemize}
+
+\begin{stepbox}{Exercise 1 \quad An N-gram by hand}
+  In a corpus, \tok{the sky is} appears 200 times, followed by \tok{blue}
+  120 times, \tok{clear} 50 times and \tok{grey} 30 times.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item $P(\tok{blue} \mid \tok{the sky is}) = \sol[3cm]{120/200 = 0.6}$.
+    \item $P(\tok{red} \mid \tok{the sky is}) = \sol[3cm]{0}$, because
+          $\sol[6cm]{\text{it never appears in the corpus}}$.
+  \end{enumerate}
+\end{stepbox}
+
+\paragraph{Weaknesses.}
+\begin{itemize}
+  \item \textbf{Too specific}: \tok{the sky was} and \tok{the sky is} are
+        counted as unrelated.
+  \item \textbf{Short memory}: a 4-gram forgets everything more than three
+        words back.
+  \item A larger $N$ does not help, because most long sequences never appear
+        in the data.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Word Embeddings: Words as Vectors}
+\label{sec:embed}
+
+\begin{itemize}
+  \item To fix ``too specific'', we turn each word into a vector, called an
+        \textbf{embedding}.
+  \item Words with similar meaning get similar vectors.
+  \item \textbf{Word2vec} (2013) learns them by predicting a word from its
+        neighbours.
+  \item Words used in similar contexts end up close together, e.g.\
+        \tok{is}/\tok{was} or \tok{cat}/\tok{dog}.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[x=1.1cm, y=1.1cm, >=Stealth]
+    \draw[->, gray] (0,0) -- (6,0);
+    \draw[->, gray] (0,0) -- (0,3.6);
+    \foreach \x/\y/\w in {1/0.8/man, 2/2.6/woman, 4/1.0/king, 5/2.8/queen} {
+        \fill[mainblue] (\x,\y) circle (2.5pt);
+        \node[right=2pt, font=\small\sffamily] at (\x,\y) {\w};
+      }
+    \draw[->, thick, orange!80!black] (1,0.8) -- (1.95,2.5);
+    \draw[->, thick, orange!80!black] (4,1.0) -- (4.95,2.7);
+    \node[font=\scriptsize, orange!80!black, align=center] at (2.9,1.5)
+    {same direction:\\``male $\to$ female''};
+    \node[layerlabel] at (3,-0.45) {a 2-D picture of embedding space
+      (real embeddings have hundreds of dimensions)};
+  \end{tikzpicture}
+  \caption{Directions in embedding space carry meaning.}
+  \label{fig:embed}
+\end{figure}
+
+\begin{stepbox}{Exercise 2 \quad Vector arithmetic on words}
+  Using Figure~\ref{fig:embed}:
+  $\;\tok{king} - \tok{man} + \tok{woman} \approx \sol[3cm]{\tok{queen}}$.
+\end{stepbox}
+
+\begin{itemize}
+  \item Embeddings are still the \textbf{first layer} of every LLM today.
+\end{itemize}
+
+\paragraph{Weakness: no context.}
+\begin{itemize}
+  \item A word gets the same vector in every sentence.
+  \item \tok{bank} looks the same in \emph{river bank} and in
+        \emph{bank account}.
+  \item We need a model that reads the whole sentence.
+\end{itemize}
+
+\begin{notebox}
+  \textbf{Try it.} \url{https://projector.tensorflow.org}
+  \begin{itemize}
+    \item Search for a word and see its nearest neighbours in 3-D.
+  \end{itemize}
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Recurrent Neural Networks: Memory}
+\label{sec:rnn}
+
+\begin{itemize}
+  \item A \textbf{recurrent neural network} (RNN) reads one word at a time.
+  \item It keeps a \textbf{hidden state} $\bh_t$ that summarises everything
+        read so far.
+  \item At each step it combines the old memory with the new word.
+\end{itemize}
+
+\begin{resultbox}
+  \[
+    \bh_t = \tanh\!\big(\bW_{h}\,\bh_{t-1} + \bW_{x}\,\bx_t + \bb\big)
+  \]
+  \begin{itemize}
+    \item $\bx_t$ is the embedding of word $t$.
+    \item The \emph{same} $\bW_h, \bW_x, \bb$ are used at every step.
+    \item A softmax on top of $\bh_t$ predicts the next word.
+  \end{itemize}
+\end{resultbox}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=1.6cm]
+    \node[cell] (h1) {$\bh_1$};
+    \node[cell, right=of h1] (h2) {$\bh_2$};
+    \node[cell, right=of h2] (h3) {$\bh_3$};
+    \node[left=1.0cm of h1, font=\small] (h0) {$\bh_0$};
+    \foreach \i/\w in {1/The, 2/sky, 3/is} {
+        \node[word, below=0.7cm of h\i] (x\i) {\w};
+        \draw[->, thick] (x\i) -- (h\i);
+      }
+    \node[font=\small\sffamily, above=0.6cm of h1] (y1) {sky?};
+    \node[font=\small\sffamily, above=0.6cm of h2] (y2) {is?};
+    \node[font=\small\sffamily, above=0.6cm of h3, orange!80!black] (y3)
+    {\textbf{blue?}};
+    \foreach \i in {1,2,3} \draw[->, thick, gray] (h\i) -- (y\i);
+    \draw[->, thick, mainblue] (h0) -- (h1);
+    \draw[->, thick, mainblue] (h1) -- node[above, font=\scriptsize] {memory} (h2);
+    \draw[->, thick, mainblue] (h2) -- node[above, font=\scriptsize] {memory} (h3);
+  \end{tikzpicture}
+  \caption{An RNN unrolled over three words; every box has the same weights.}
+  \label{fig:rnn}
+\end{figure}
+
+\begin{patternbox}
+  \textbf{Weight sharing again.}
+  \begin{itemize}
+    \item A CNN reuses one kernel at every \emph{position in space}.
+    \item An RNN reuses one set of weights at every \emph{position in time}.
+    \item In both, the number of parameters does not depend on the input
+          size.
+  \end{itemize}
+\end{patternbox}
+
+\paragraph{LSTM and GRU.}
+\begin{itemize}
+  \item A plain RNN forgets quickly.
+  \item The \textbf{LSTM} (1997) and \textbf{GRU} (2014) add \emph{gates}
+        that learn what to keep and what to forget.
+  \item LSTMs were the state of the art from about 2014 to 2017.
+  \item In 2016 Google Translate switched to an LSTM
+        \textbf{encoder--decoder} (seq2seq).
+\end{itemize}
+
+\paragraph{Weaknesses.}
+\begin{itemize}
+  \item \textbf{Memory bottleneck}: the whole history must fit in one vector
+        $\bh_t$.
+  \item \textbf{Vanishing gradient}: the gradient is multiplied by $\bW_h$ at
+        every step, so it shrinks towards zero.
+  \item \textbf{Slow}: $\bh_t$ needs $\bh_{t-1}$, so the GPU cannot work in
+        parallel.
+\end{itemize}
+
+\begin{notebox}
+  \textbf{Why is an RNN slow?}
+  \begin{itemize}
+    \item To compute $\bh_{100}$, the RNN must first compute
+          $\bh_1, \bh_2, \dots, \bh_{99}$, one after another.
+    \item These steps cannot run in parallel.
+  \end{itemize}
+\end{notebox}
+
+\begin{notebox}
+  \textbf{Read more.}
+  \begin{itemize}
+    \item LSTM gates, with diagrams:\newline
+          \url{https://colah.github.io/posts/2015-08-Understanding-LSTMs/}
+    \item What a character-level RNN can generate:\newline
+          \url{https://karpathy.github.io/2015/05/21/rnn-effectiveness/}
+  \end{itemize}
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Attention and the Transformer}
+\label{sec:transformer}
+
+\paragraph{Attention.}
+\begin{itemize}
+  \item In 2014, attention let RNN translators ``look back'' at any input
+        word.
+  \item In 2017, \emph{Attention Is All You Need} dropped the RNN and kept
+        only attention.
+  \item The result is the \textbf{Transformer}.
+\end{itemize}
+
+\paragraph{The idea: self-attention.}
+\begin{itemize}
+  \item Every word looks at every other word in the sentence.
+  \item It decides how relevant each of the other words is.
+  \item Its new vector is a \textbf{weighted average} of their vectors.
+\end{itemize}
+
+\begin{resultbox}
+  \[
+    \text{new vector of word } i
+    = \sum_{j} a_{ij}\,(\text{vector of word } j),
+    \qquad a_{ij} \ge 0,\;\; \sum_j a_{ij} = 1
+  \]
+  \begin{itemize}
+    \item The weight $a_{ij}$ is a softmax of how well words $i$ and $j$
+          ``match''.
+    \item The network learns what a good match is.
+  \end{itemize}
+\end{resultbox}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth]
+    \node[word] (w1) at (0,0) {The};
+    \foreach \w [count=\i from 2] in {animal, didn't, cross, the, street,
+        because, it, was, tired} {
+        \pgfmathtruncatemacro{\p}{\i-1}
+        \node[word, right=3pt of w\p] (w\i) {\w};
+      }
+    \draw[->, line width=3pt, orange!80!black, opacity=0.85]
+    (w8.north) to[out=110, in=70] (w2.north);
+    \draw[->, line width=1.2pt, orange!80!black, opacity=0.5]
+    (w8.north) to[out=120, in=60] (w6.north);
+    \draw[->, line width=0.6pt, orange!80!black, opacity=0.5]
+    (w8.south) to[out=-60, in=-120] (w10.south);
+    \node[font=\scriptsize, orange!80!black, below=0.55cm of w4]
+    {\tok{it} attends mostly to \tok{animal}};
+  \end{tikzpicture}
+  \caption{Self-attention for \tok{it}; a thicker arrow means a larger
+    weight.}
+  \label{fig:attention}
+\end{figure}
+
+\paragraph{Why it won.}
+\begin{itemize}
+  \item \textbf{No bottleneck}: word 1 and word 1000 are linked in one step.
+  \item \textbf{Parallel}: all words are processed at once, which suits GPUs.
+  \item \textbf{Context}: \tok{bank} gets a different vector near
+        \tok{river} than near \tok{account}.
+\end{itemize}
+
+\paragraph{Inside.}
+\begin{itemize}
+  \item A Transformer is a stack of identical \textbf{blocks}.
+  \item Each block is a self-attention layer followed by a small MLP.
+  \item Residual connections, as in ResNet, link the blocks.
+  \item A \textbf{positional encoding} tells the model where each word is.
+\end{itemize}
+
+\begin{notebox}
+  \textbf{RNN versus Transformer.}
+  \begin{center}
+    \renewcommand{\arraystretch}{1.4}
+    \begin{tabular}{lll}
+      \toprule
+                                    & RNN           & Transformer \\
+      \midrule
+      Words processed               & one at a time & all at once \\
+      Path from word 1 to word 1000 & 999 steps     & 1 step      \\
+      Uses the GPU well?            & no            & yes         \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+\end{notebox}
+
+\begin{notebox}
+  \textbf{For the curious.}
+  The full formula is $\operatorname{softmax}\!\big(QK^{\top}/\sqrt{d}\big)\,V$.
+  \begin{itemize}
+    \item The \emph{query} asks: what am I looking for?
+    \item The \emph{key} says: what do I contain?
+    \item The \emph{value} is what gets passed on.
+    \item The weight $a_{ij}$ comes from query$_i \cdot$ key$_j$.
+  \end{itemize}
+\end{notebox}
+
+\paragraph{Three families.}
+\begin{itemize}
+  \item The original Transformer has an \textbf{encoder} (reads) and a
+        \textbf{decoder} (writes).
+  \item Later models kept one or both halves.
+\end{itemize}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{>{\raggedright}p{2.7cm}>{\raggedright}p{3.0cm}>{\raggedright}p{3.4cm}>{\raggedright\arraybackslash}p{4.0cm}}
+    \toprule
+    Family           & Example (year)            & Sees                           & Good at                               \\
+    \midrule
+    Encoder--decoder & original, T5 (2017, 2019) & the input, then its own output & translation, summarisation            \\
+    Encoder only     & BERT (2018)               & the whole sentence             & understanding: classification, search \\
+    Decoder only     & GPT (2018)                & only the words so far          & \textbf{generating text}              \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\begin{itemize}
+  \item ChatGPT, Claude, Gemini and Llama are all \textbf{decoder-only}.
+  \item They do exactly the next-word prediction of Section~\ref{sec:task}.
+  \item GPT stands for \emph{Generative Pre-trained Transformer}.
+\end{itemize}
+
+\begin{notebox}
+  \textbf{Try it.}
+  \begin{itemize}
+    \item Watch a small GPT run step by step in your browser:\newline
+          \url{https://poloclub.github.io/transformer-explainer/}
+    \item Walk through a whole LLM in 3-D: \url{https://bbycroft.net/llm}
+    \item See the attention weights of a real model:\newline
+          \url{https://huggingface.co/spaces/exbert-project/exbert}
+  \end{itemize}
+\end{notebox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Scale: From GPT-1 to GPT-3}
+\label{sec:scale}
+
+\begin{itemize}
+  \item Once the architecture was fixed, progress came from making it
+        \textbf{bigger}.
+\end{itemize}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{lll}
+    \toprule
+    Model & Year & Parameters  \\
+    \midrule
+    GPT-1 & 2018 & 0.1 billion \\
+    GPT-2 & 2019 & 1.5 billion \\
+    GPT-3 & 2020 & 175 billion \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\paragraph{Scaling laws.}
+\begin{itemize}
+  \item The error falls smoothly and \emph{predictably} as three things grow
+        together:
+        \begin{itemize}
+          \item the number of parameters,
+          \item the amount of training text,
+          \item the computing power.
+        \end{itemize}
+  \item This turned AI progress into an engineering plan: spend more, get a
+        better model.
+\end{itemize}
+
+\paragraph{New abilities.}
+\begin{itemize}
+  \item Predicting the next word on the internet also teaches grammar, facts,
+        translation and some reasoning.
+  \item That is because all of these help to predict the next word.
+  \item GPT-3 showed \textbf{in-context learning}: it learns from examples in
+        the prompt, without retraining.
+\end{itemize}
+\begin{center}
+  \tt\small
+  \begin{tabular}{l}
+    sea otter => loutre de mer \\
+    cheese => fromage          \\
+    peppermint => \textcolor{orange!80!black}{\textit{(model writes:) menthe poivr\'ee}}
+  \end{tabular}
+\end{center}
+\begin{itemize}
+  \item This made \textbf{prompting} a new way to program a model.
+\end{itemize}
+
+\paragraph{Weakness: a base model is not an assistant.}
+\begin{itemize}
+  \item A pre-trained model only \emph{continues} text.
+  \item Asked ``What is the capital of Thailand?'', it may just write more
+        quiz questions.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{From Text Predictor to Assistant}
+\label{sec:assistant}
+
+\begin{itemize}
+  \item ChatGPT (November 2022) added two training stages after
+        pre-training.
+  \item Every chat model since then follows the same recipe.
+\end{itemize}
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[>=Stealth, node distance=0.6cm]
+    \tikzset{stage/.style={opbox, text width=3.6cm, minimum height=2.2cm}}
+    \node[stage] (pt) {\textbf{1. Pre-training}\\[4pt]\scriptsize
+      next-word prediction on\\trillions of tokens of text};
+    \node[stage, right=of pt] (sft) {\textbf{2. Instruction}\\
+      \textbf{tuning}\\[4pt]\scriptsize learn from examples\\of good answers};
+    \node[stage, right=of sft] (rl) {\textbf{3. Learning}\\
+      \textbf{from feedback}\\[4pt]\scriptsize reward answers\\people
+      prefer (RLHF)};
+    \draw[->, thick] (pt) -- (sft);
+    \draw[->, thick] (sft) -- (rl);
+    \node[layerlabel, below=0.25cm of pt] {knowledge};
+    \node[layerlabel, below=0.25cm of sft] {format: answer, don't continue};
+    \node[layerlabel, below=0.25cm of rl] {helpful, honest, safe};
+  \end{tikzpicture}
+  \caption{The three training stages; stage 1 uses most of the data and
+    compute.}
+  \label{fig:stages}
+\end{figure}
+
+\begin{itemize}
+  \item \textbf{Pre-training} gives the model language and knowledge about
+        the world.
+  \item \textbf{Instruction tuning} (SFT) trains it on example conversations
+        written by people.
+  \item \textbf{RLHF} (reinforcement learning from human feedback):
+        \begin{itemize}
+          \item The model writes several answers, and people rank them.
+          \item The model is then trained towards the higher-ranked answers.
+          \item A variant uses AI feedback guided by written principles
+                (\emph{Constitutional AI}, Anthropic).
+        \end{itemize}
+\end{itemize}
+
+\begin{stepbox}{Exercise 3 \quad Which stage?}
+  Name the training stage that is mainly responsible for each behaviour.
+  \begin{enumerate}[label=(\alph*), nosep]
+    \item The model knows that Bangkok is the capital of Thailand:
+          $\sol[4cm]{\text{pre-training}}$.
+    \item It answers a question instead of writing more questions:
+          $\sol[4cm]{\text{instruction tuning}}$.
+    \item Of two correct answers, the model prefers the clearer and more
+          polite one: $\sol[4cm]{\text{RLHF}}$.
+  \end{enumerate}
+\end{stepbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Where the Field Is Now}
+\label{sec:now}
+
+\begin{itemize}
+  \item The core is unchanged: a decoder-only Transformer trained in three
+        stages.
+\end{itemize}
+
+\paragraph{Main directions.}
+\begin{itemize}
+  \item \textbf{Multimodal}: images, audio and documents are turned into
+        tokens too.
+        \begin{itemize}
+          \item A model can read a photo of a machine, a scanned form or a
+                chart.
+        \end{itemize}
+  \item \textbf{Long context}: from about 2\,000 tokens to hundreds of
+        thousands or millions.
+        \begin{itemize}
+          \item A model can read a whole manual or code base at once.
+        \end{itemize}
+  \item \textbf{Open weights}: anyone can download and run these models.
+        \begin{itemize}
+          \item Examples are Llama, Mistral, Qwen and DeepSeek, from laptop
+                size to frontier size.
+        \end{itemize}
+  \item \textbf{Efficiency}: large models are made cheaper to run.
+        \begin{itemize}
+          \item \emph{Mixture of experts} uses only part of the network for
+                each token.
+          \item \emph{Distillation} trains small models to copy large ones.
+        \end{itemize}
+  \item \textbf{Reasoning models} (2024 onwards):
+        \begin{itemize}
+          \item They are trained to ``think'' step by step before answering.
+          \item Spending more compute at answer time (\emph{test-time
+                compute}) gives better answers.
+          \item The biggest gains are in maths, science and programming.
+        \end{itemize}
+  \item \textbf{Tools and agents}:
+        \begin{itemize}
+          \item A model can search the web, run code, query databases and
+                edit files.
+          \item An \textbf{agent} repeats think $\to$ act $\to$ observe until
+                the task is done.
+          \item Coding agents such as Claude Code handle multi-step
+                programming tasks.
+        \end{itemize}
+\end{itemize}
+
+\begin{warnbox}
+  \textbf{Limitations that remain.}
+  \begin{itemize}
+    \item \textbf{Hallucination}: the model is trained for \emph{likely}
+          text, not \emph{true} text, so check its outputs.
+    \item \textbf{Knowledge cutoff}: the model knows nothing after its
+          training data ends.
+          \begin{itemize}
+            \item The fix is a search tool, or supplying documents
+                  (\emph{RAG}).
+          \end{itemize}
+    \item \textbf{Cost}: training a frontier model costs hundreds of millions
+          of dollars.
+  \end{itemize}
+\end{warnbox}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Summary}
+\label{sec:summary}
+
+\begin{center}
+  \renewcommand{\arraystretch}{1.4}
+  \begin{tabular}{>{\raggedright}p{2.6cm}>{\raggedright}p{5.4cm}>{\raggedright\arraybackslash}p{5.4cm}}
+    \toprule
+    Step                    & Key idea                                   & Weakness that led to the next step \\
+    \midrule
+    N-grams                 & count word sequences                       & too specific; short memory         \\
+    Embeddings (2013)       & words as vectors; similar meaning is close & one vector per word, no context    \\
+    RNN / LSTM (1997--2014) & hidden state carries memory                & vanishing gradient; not parallel   \\
+    Transformer (2017)      & self-attention: every word sees every word & ---                                \\
+    Scale (2018--2020)      & bigger model, more data, more compute      & only continues text                \\
+    Assistant (2022)        & instruction tuning + RLHF                  & hallucination, cutoff, cost        \\
+    Now (2023--)            & multimodal, reasoning, tools and agents    &                                    \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\begin{itemize}
+  \item Every model solves the same task: classify the next word with a
+        softmax.
+  \item The models differ in how they read the context: by counting, by a
+        memory vector, or by attention.
+  \item Attention gives direct links and runs in parallel, so huge models
+        became trainable.
+  \item Scale gave broad ability; SFT and RLHF turned the model into an
+        assistant.
+\end{itemize}
+
+\paragraph{Resources.}
+\begin{itemize}
+  \item Tokenizer playground: \url{https://tiktokenizer.vercel.app}
+  \item Embedding projector: \url{https://projector.tensorflow.org}
+  \item Understanding LSTMs:\newline
+        \url{https://colah.github.io/posts/2015-08-Understanding-LSTMs/}
+  \item Transformer Explainer:
+        \url{https://poloclub.github.io/transformer-explainer/}
+  \item LLM visualisation: \url{https://bbycroft.net/llm}
+  \item Attention visualised:
+        \url{https://huggingface.co/spaces/exbert-project/exbert}
+  \item A full free NLP course: \url{https://www.nlpdemystified.org/course}
+\end{itemize}
+
+\end{document}
