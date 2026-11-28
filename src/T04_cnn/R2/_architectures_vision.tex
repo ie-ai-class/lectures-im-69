@@ -143,16 +143,16 @@ Section 4.1.
   \renewcommand{\arraystretch}{1.35}
   \begin{tabular}{llll}
     \toprule
-    Layer                     & Operation              & Output shape    & Parameters                         \\
+    Layer                     & Operation              & Output shape   & Parameters                        \\
     \midrule
-    Input                     &                        & $(1, 32, 32)$   & ---                                \\
-    C1                        & 6 filters $5\times5$   & $(6, 28, 28)$   & $(1\cdot25+1)\cdot6 = 156$         \\
-    S2                        & avg pool $2\times2$    & $(6, 14, 14)$   & $0$                                \\
-    C3                        & 16 filters $5\times5$  & $(16, 10, 10)$  & $(6\cdot25+1)\cdot16 = 2\,416$     \\
-    S4                        & avg pool $2\times2$    & $(16, 5, 5)$    & $0$                                \\
-    C5                        & 120 filters $5\times5$ & $(120, 1, 1)$   & $(16\cdot25+1)\cdot120 = 48\,120$  \\
-    F6                        & linear                 & $(84)$          & $(120+1)\cdot84 = 10\,164$         \\
-    Output                    & linear                 & $(10)$          & $(84+1)\cdot10 = 850$              \\
+    Input                     &                        & $(1, 32, 32)$  & ---                               \\
+    C1                        & 6 filters $5\times5$   & $(6, 28, 28)$  & $(1\cdot25+1)\cdot6 = 156$        \\
+    S2                        & avg pool $2\times2$    & $(6, 14, 14)$  & $0$                               \\
+    C3                        & 16 filters $5\times5$  & $(16, 10, 10)$ & $(6\cdot25+1)\cdot16 = 2\,416$    \\
+    S4                        & avg pool $2\times2$    & $(16, 5, 5)$   & $0$                               \\
+    C5                        & 120 filters $5\times5$ & $(120, 1, 1)$  & $(16\cdot25+1)\cdot120 = 48\,120$ \\
+    F6                        & linear                 & $(84)$         & $(120+1)\cdot84 = 10\,164$        \\
+    Output                    & linear                 & $(10)$         & $(84+1)\cdot10 = 850$             \\
     \midrule
     \multicolumn{3}{l}{Total} & $61\,706$                                                                   \\
     \bottomrule
@@ -294,7 +294,7 @@ He et al.\ (Microsoft Research) found that a plain 56-layer network had a
 to \emph{optimise}. Their fix was the \textbf{residual block}, whose layers
 compute a correction $F(\bH)$ that is \emph{added} to the block's input
 through a \textbf{skip connection}: $\text{output} = \relu\bigl(F(\bH) +
-\bH\bigr)$. If the best thing a block can do is nothing, it only needs
+  \bH\bigr)$. If the best thing a block can do is nothing, it only needs
 $F = 0$, which is easy to learn. The skip connection also keeps the gradient
 alive: a plain layer $y = f(x)$ multiplies the gradient by $f'$, and a product
 of many small factors vanishes (Section 3.4), while the residual version
@@ -361,7 +361,7 @@ A standard convolution filters space and mixes all channels at once.
 \textbf{depthwise} convolution (one $k \times k$ filter per input channel,
 applied to that channel only) followed by a \textbf{pointwise} $1 \times 1$
 convolution that mixes the channels. This \textbf{depthwise separable
-convolution} costs $1/C_{\text{out}} + 1/k^2$ of a standard one: for
+  convolution} costs $1/C_{\text{out}} + 1/k^2$ of a standard one: for
 $3 \times 3$ kernels and many channels, about 8 to 9 times fewer weights and
 multiplications, for a small loss in accuracy. \textbf{MobileNetV2} (2018)
 adds ResNet's skip connections, and \textbf{MobileNetV3} (2019) reaches 74.0\%
@@ -596,11 +596,11 @@ optimizer = torch.optim.Adam(model.fc.parameters(), lr=1e-3)
       \draw[frame] (0,0) rectangle (3.2,2.6);
       \filldraw[fill=gray!45, draw=gray!80!black] (1.6,1.3) circle (0.7);
       \filldraw[fill=gray!8, draw=gray!80!black] (1.6,1.3) circle (0.3);
-      \node[font=\small] at (1.6,-0.35) {label: \texttt{nut}};
-      \node[font=\small\bfseries] at (1.6,-0.95) {(a) classification};
+      \node[font=\footnotesize] at (1.6,-0.35) {label: \texttt{nut}};
+      \node[font=\footnotesize\bfseries] at (1.6,-0.85) {(a) classification};
     \end{scope}
     % (b) detection
-    \begin{scope}[xshift=3.7cm]
+    \begin{scope}[xshift=3.9cm]
       \scene{fill=gray!45, draw=gray!80!black}{fill=gray!45, draw=gray!80!black}
       {fill=gray!45, draw=gray!80!black}
       \draw[bbox, mainblue] (0.4,0.5) rectangle (1.4,1.5);
@@ -612,22 +612,22 @@ optimizer = torch.optim.Adam(model.fc.parameters(), lr=1e-3)
       at (1.85,2.3) {nut 0.91};
       \node[font=\tiny, fill=orange!80!black, text=white, inner sep=1pt, anchor=north west]
       at (1.6,0.25) {bolt 0.88};
-      \node[font=\small] at (1.6,-0.35) {boxes + labels};
-      \node[font=\small\bfseries] at (1.6,-0.95) {(b) object detection};
+      \node[font=\footnotesize] at (1.6,-0.35) {boxes + labels};
+      \node[font=\footnotesize\bfseries] at (1.6,-0.85) {(b) object detection};
     \end{scope}
     % (c) semantic segmentation
-    \begin{scope}[xshift=7.4cm]
+    \begin{scope}[xshift=7.8cm]
       \scene{fill=mainblue!60, draw=mainblue}{fill=mainblue!60, draw=mainblue}
       {fill=orange!60, draw=orange!80!black}
-      \node[font=\small] at (1.6,-0.35) {class of every pixel};
-      \node[font=\small\bfseries] at (1.6,-0.95) {(c) semantic segm.};
+      \node[font=\footnotesize] at (1.6,-0.35) {class of every pixel};
+      \node[font=\footnotesize\bfseries] at (1.6,-0.85) {(c) semantic segm.};
     \end{scope}
     % (d) instance segmentation
-    \begin{scope}[xshift=11.1cm]
+    \begin{scope}[xshift=11.7cm]
       \scene{fill=mainblue!60, draw=mainblue}{fill=green!50!black!50, draw=green!40!black}
       {fill=orange!60, draw=orange!80!black}
-      \node[font=\small] at (1.6,-0.35) {pixels of every object};
-      \node[font=\small\bfseries] at (1.6,-0.95) {(d) instance segm.};
+      \node[font=\footnotesize] at (1.6,-0.35) {pixels of every object};
+      \node[font=\footnotesize\bfseries] at (1.6,-0.85) {(d) instance segm.};
     \end{scope}
   \end{tikzpicture}
   \caption{Four vision tasks on images of parts. (a) One label for the whole
@@ -641,12 +641,13 @@ optimizer = torch.optim.Adam(model.fc.parameters(), lr=1e-3)
   \renewcommand{\arraystretch}{1.35}
   \begin{tabular}{lll}
     \toprule
-    Task                   & Output per image                        & Loss (main parts)     \\
+    Task                  & Output per image                        & Loss (main parts)     \\
     \midrule
-    Classification         & $C$ class scores                        & cross-entropy         \\
-    Object detection       & a list of (box, class, score)           & box regression + CE   \\
-    Semantic segmentation  & $C$ scores per pixel, shape $(C, H, W)$ & CE at every pixel     \\
-    Instance segmentation  & boxes + a pixel mask per object         & detection + mask loss \\
+    Classification        & $C$ class scores                        & cross-entropy         \\
+    Object detection      & a list of (box, class, score)           & box regression + CE   \\
+    Semantic segmentation & $C$ scores per pixel, shape $(C, H, W)$ & CE at every pixel     \\
+    Instance segmentation & boxes + a pixel mask per object         & detection + mask loss \\
+    OCR                   & a string per text region                & detection + CTC loss  \\
     \bottomrule
   \end{tabular}
 \end{center}
@@ -658,7 +659,9 @@ inspection system must outline the scratch, and a traceability system must
 handles all of these; only the head and the loss change. Every loss is built
 from the two pieces of Section 3.4: a \emph{regression} loss for continuous
 outputs such as box coordinates, and \emph{cross-entropy} for class labels.
-This part is an overview; the details are left to an advanced topic.
+OCR is not a new kind of output but a combination: it detects text regions
+and then reads each one as a sequence of characters
+(Section~\ref{sec:ocr}).
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Object Detection}
@@ -667,7 +670,7 @@ A detector outputs, for every object, a \textbf{bounding box} (the smallest
 axis-aligned rectangle around it, given by its corners or by its centre and
 size), a class and a confidence score. A predicted box will never match the
 true box exactly, so overlap is measured by the \textbf{intersection over
-union}, $\text{IoU}(A, B) = \text{area}(A \cap B) / \text{area}(A \cup B)$,
+  union}, $\text{IoU}(A, B) = \text{area}(A \cap B) / \text{area}(A \cup B)$,
 which is $1$ for identical boxes and $0$ for boxes that do not touch; a
 detection usually counts as correct if $\text{IoU} \ge 0.5$ with a true box of
 the same class. Because a detector looks at many positions, it often reports
@@ -773,12 +776,13 @@ predicts a mask inside each box.
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Optical Character Recognition (OCR)}
+\label{sec:ocr}
 
 \textbf{OCR} turns text in an image into a string: a serial number on a part,
 a lot code and expiry date on a package, the reading of a meter. Modern OCR
 systems are a pipeline of the tasks above. \textbf{Text detection} finds the
 regions that contain text, using detection or segmentation. \textbf{Text
-recognition} then reads each cropped line: instead of cutting it into single
+  recognition} then reads each cropped line: instead of cutting it into single
 characters, modern recognisers such as \textbf{CRNN} run a CNN over the whole
 line, read the feature map column by column as a sequence, and are trained
 with the \textbf{CTC} loss, which does not need to know where each character
@@ -816,29 +820,20 @@ dictionaries or checksums. Ready-made libraries include \textbf{Tesseract},
 \begin{center}
   \renewcommand{\arraystretch}{1.35}
   \begin{tabular}{>{\raggedright\arraybackslash}p{5.2cm}
-      >{\raggedright\arraybackslash}p{3.6cm}
-      >{\raggedright\arraybackslash}p{5.4cm}}
+    >{\raggedright\arraybackslash}p{3.6cm}
+    >{\raggedright\arraybackslash}p{5.4cm}}
     \toprule
-    Application                         & Task                    & Example                                         \\
+    Application                   & Task                       & Example                                          \\
     \midrule
-    Accept / reject a part              & classification          & surface defect type on steel sheet              \\
-    Locate defects or count parts       & object detection        & missing components on a PCB; parts on a conveyor \\
-    Measure defect shape and size       & segmentation            & crack or weld-seam outline                      \\
-    Robot picking                       & detection / instance segm. & grasp points in a bin of parts              \\
-    Traceability                        & OCR                     & serial numbers, lot codes, expiry dates         \\
-    Rare or unknown defects             & anomaly detection       & train only on good parts, flag anything unusual \\
+    Accept / reject a part        & classification             & surface defect type on steel sheet               \\
+    Locate defects or count parts & object detection           & missing components on a PCB; parts on a conveyor \\
+    Measure defect shape and size & segmentation               & crack or weld-seam outline                       \\
+    Robot picking                 & detection / instance segm. & grasp points in a bin of parts                   \\
+    Traceability                  & OCR                        & serial numbers, lot codes, expiry dates          \\
+    Rare or unknown defects       & anomaly detection          & train only on good parts, flag anything unusual  \\
     \bottomrule
   \end{tabular}
 \end{center}
-
-\begin{notebox}
-  \textbf{Practical advice.} Start from a pretrained model and fine-tune it
-  (transfer learning, Section~\ref{sec:transfer}); a few hundred well-labelled
-  images per class are often enough. Invest in consistent lighting and camera
-  position: a controlled image makes every task easier. Choose the evaluation
-  measure with the cost of errors in mind: a missed defect (low recall) is
-  usually far more expensive than a false alarm.
-\end{notebox}
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Summary}
